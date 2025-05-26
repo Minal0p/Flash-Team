@@ -1540,18 +1540,22 @@
                 }
 
                 const updates = {
-                    // id: window.currentUser.id, // لا نرسل id عند التحديث إذا كان هو المفتاح الأساسي ويتم تحديده بـ .eq()
+                    id: window.currentUser.id, // مهم لعملية upsert لتحديد الصف
                     full_name: fullName,
                     academic_id: academicId,
                     avatar_url: avatarPublicUrl,
                     updated_at: new Date().toISOString(),
                 };
-                console.log("updateUserProfile: Attempting to update 'profiles' table with data:", updates, "for user ID:", window.currentUser.id);
+                //  لا نقم بتحديث الدور هنا، يتم تحديث الدور عبر submitReferralCode
+                // if (window.currentUser.role) { // Only include role if it's already set on currentUser
+                //    updates.role = window.currentUser.role;
+                // }
+
+                console.log("updateUserProfile: Attempting to upsert 'profiles' table with data:", updates, "for user ID:", window.currentUser.id);
 
                 const { error: profileError } = await window.supabaseClient
                     .from('profiles')
-                    .update(updates)
-                    .eq('id', window.currentUser.id); 
+                    .upsert(updates, { onConflict: 'id' }); //  تحديث الصف الذي يطابق id المستخدم الحالي أو إضافته إذا لم يكن موجودًا
 
                 if (profileError) throw profileError;
 
@@ -1559,7 +1563,8 @@
                 window.currentUser.full_name_profile = fullName;
                 window.currentUser.academic_id_profile = academicId;
                 window.currentUser.avatar_url = avatarPublicUrl;
-                // إذا تم تحديث الدور عبر كود الإحالة، سيتم تحديثه في fetchUserProfile
+                // استدعاء fetchUserProfile لتحديث الدور وأي بيانات أخرى قد تكون تغيرت
+                await fetchUserProfile();
                 
                 if(profileUpdateStatus) {
                     profileUpdateStatus.textContent = 'تم حفظ التغييرات بنجاح!';
@@ -1579,7 +1584,7 @@
                 if (error.message && error.message.toLowerCase().includes('bucket not found')) {
                     userErrorMessage = `فشل تحديث الملف الشخصي: لم يتم العثور على حاوية التخزين (Bucket) بالاسم 'personal-image'. يرجى التأكد من إنشائها في Supabase Storage وجعلها عامة.`;
                 } else if (error.message && error.message.toLowerCase().includes('violates row-level security policy')) {
-                     userErrorMessage = `فشل تحديث الملف الشخصي: تم رفض العملية بواسطة سياسة الأمان (RLS). تأكد أن سياسة UPDATE لجدول 'profiles' تسمح لك بتحديث ملفك الشخصي (عادةً بشرط auth.uid() = id). تأكد أيضًا أن RLS مفعلة لجدول 'profiles' وأن الـ trigger 'handle_new_user' يعمل بشكل صحيح لإنشاء صف لك في جدول 'profiles' عند التسجيل. User ID being used: ${window.currentUser?.id}`;
+                     userErrorMessage = `فشل تحديث الملف الشخصي: تم رفض العملية بواسطة سياسة الأمان (RLS). تأكد أن سياسات INSERT و UPDATE لجدول 'profiles' تسمح لك بتعديل ملفك الشخصي (عادةً بشرط auth.uid() = id). تأكد أيضًا أن RLS مفعلة لجدول 'profiles' وأن الـ trigger 'handle_new_user' يعمل بشكل صحيح لإنشاء صف لك في جدول 'profiles' عند التسجيل. User ID being used: ${window.currentUser?.id}`;
                 }
                  if(profileUpdateStatus) {
                     profileUpdateStatus.textContent = userErrorMessage;
@@ -1588,6 +1593,7 @@
                 }
                  if(profileAvatarUploadProgress && avatarFile) profileAvatarUploadProgress.textContent = 'فشل رفع الصورة.';
             } finally {
+                 const profileUpdateBtn = profileModalElement.querySelector('button[onclick="updateUserProfile()"]');
                  if(profileUpdateBtn) {
                     profileUpdateBtn.disabled = false;
                     profileUpdateBtn.innerHTML = `حفظ التغييرات`;
@@ -1613,6 +1619,7 @@
             }
 
             if (enteredCode === 'MinaOmarMena') {
+                console.log("Attempting to update role to full_access_user for user:", window.currentUser.id);
                 const { error: updateError } = await window.supabaseClient
                     .from('profiles')
                     .update({ role: 'full_access_user', updated_at: new Date().toISOString() })
@@ -1634,6 +1641,7 @@
                     }
                     if(profileReferralCodeSection) profileReferralCodeSection.style.display = 'none'; 
                     updateLoginUI(); 
+                    await fetchUserProfile(); // Re-fetch profile to confirm role update from DB
                 }
             } else {
                  if(referralStatusDiv) {
@@ -1718,4 +1726,3 @@
     </script>
 </body>
 </html>
-
