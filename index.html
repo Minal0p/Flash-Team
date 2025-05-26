@@ -1540,31 +1540,28 @@
                 }
 
                 const updates = {
-                    id: window.currentUser.id, // مهم لعملية upsert لتحديد الصف
+                    id: window.currentUser.id, 
                     full_name: fullName,
                     academic_id: academicId,
                     avatar_url: avatarPublicUrl,
                     updated_at: new Date().toISOString(),
                 };
-                //  لا نقم بتحديث الدور هنا، يتم تحديث الدور عبر submitReferralCode
-                // if (window.currentUser.role) { // Only include role if it's already set on currentUser
-                //    updates.role = window.currentUser.role;
-                // }
+                
 
                 console.log("updateUserProfile: Attempting to upsert 'profiles' table with data:", updates, "for user ID:", window.currentUser.id);
 
                 const { error: profileError } = await window.supabaseClient
                     .from('profiles')
-                    .upsert(updates, { onConflict: 'id' }); //  تحديث الصف الذي يطابق id المستخدم الحالي أو إضافته إذا لم يكن موجودًا
+                    .upsert(updates, { onConflict: 'id' }); 
 
                 if (profileError) throw profileError;
 
-                // تحديث البيانات المحلية في window.currentUser
+                
                 window.currentUser.full_name_profile = fullName;
                 window.currentUser.academic_id_profile = academicId;
                 window.currentUser.avatar_url = avatarPublicUrl;
-                // استدعاء fetchUserProfile لتحديث الدور وأي بيانات أخرى قد تكون تغيرت
-                await fetchUserProfile();
+                
+                await fetchUserProfile(); //  إعادة جلب الملف الشخصي لتحديث الدور إذا تم تغييره
                 
                 if(profileUpdateStatus) {
                     profileUpdateStatus.textContent = 'تم حفظ التغييرات بنجاح!';
