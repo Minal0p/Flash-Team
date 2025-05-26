@@ -612,8 +612,18 @@
         </div>
     </footer>
 
-    <script>
-        // --- UI Elements ---
+    <script type="module">
+        // --- إعداد Supabase ---
+        const SUPABASE_URL = 'https://uzcrjhhvwgllsdsvftuj.supabase.co'; 
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6Y3JqaGh2d2dsbHNkc3ZmdHVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMTcxNzcsImV4cCI6MjA2Mzc5MzE3N30.wy_ei_ZVJoMGbXMVqrW8NVUEgk2-EvPQYpgb9gWMW18';
+        
+        const { createClient } = window.supabase; 
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY); 
+
+        window.supabaseClient = supabase; // Make client available globally
+        console.log("Supabase client initialized:", window.supabaseClient);
+        
+        // --- UI Elements (Global Scope for all functions) ---
         const authLink = document.getElementById('authLink');
         const profileLink = document.getElementById('profileLink'); 
         const authModalElement = document.getElementById('authModal');
@@ -642,8 +652,6 @@
         const userLastSignInProfileSpan = document.getElementById('userLastSignInProfile');
         const profileInfoAvatar = document.getElementById('profileInfoAvatar');
 
-
-        // Profile Modal Elements
         const profileModalElement = document.getElementById('profileModal');
         const profileAvatarPreview = document.getElementById('profileAvatarPreview');
         const profileAvatarInput = document.getElementById('profileAvatarInput');
@@ -653,12 +661,65 @@
         const profileReferralCodeInput = document.getElementById('profileReferralCodeInput');
         const profileUpdateStatus = document.getElementById('profileUpdateStatus');
         const profileAvatarUploadProgress = document.getElementById('profileAvatarUploadProgress');
+        
+        const ideasContainer = document.getElementById('ideasContainer');
+        const loadingIdeasMsg = document.getElementById('loadingIdeas');
+        const eventsContainer = document.getElementById('eventsContainer');
+        const loadingEventsMsg = document.getElementById('loadingEvents');
+        const localSaveEventButton = document.getElementById('saveEventButton'); 
+
+        const generalInfoModal = document.getElementById("infoModal"); 
+        const generalInfoModalTitle = document.getElementById("modalTitle");
+        const generalInfoModalText = document.getElementById("modalText");
+        const generalInfoModalLoading = document.getElementById("modalLoading");
+        const projectDescriptionTextElement = document.getElementById("projectDescription");
+        const projectDescriptionText = projectDescriptionTextElement ? projectDescriptionTextElement.textContent : "وصف مشروع التوزيع الكهربي الذكي";
+        const technologiesListElement = document.getElementById("technologiesList");
 
 
         // --- Auth State ---
-        // window.currentUser is now declared and managed in the module script
-        // window.supabaseClient is also managed in the module script
+        window.currentUser = null; 
+        
+        // --- Helper Functions (Global Scope) ---
+        window.showStaticModal = function(title, text) {  
+            if (!generalInfoModal || !generalInfoModalTitle || !generalInfoModalText || !generalInfoModalLoading) { console.error("Modal elements not found for showStaticModal"); return; }
+            generalInfoModalTitle.textContent = title; 
+            generalInfoModalText.innerHTML = text.replace(/\n/g, '<br>');
+            generalInfoModalLoading.style.display = "none"; 
+            generalInfoModalText.style.display = "block"; 
+            generalInfoModal.style.display = "block";
+        };
 
+        window.showModal = function(modalId) {
+            const modalToShow = document.getElementById(modalId);
+            if (modalToShow) modalToShow.style.display = "block";
+        }
+        window.closeModal = function(modalId) {
+            const modalToClose = document.getElementById(modalId);
+            if (modalToClose) {
+                modalToClose.style.display = "none";
+                if (modalId === 'authModal' && authErrorElement) { 
+                    authErrorElement.style.display = 'none';
+                }
+                if (modalId === 'profileModal' && profileUpdateStatus) {
+                    profileUpdateStatus.style.display = 'none';
+                    profileUpdateStatus.textContent = '';
+                    if(profileAvatarUploadProgress) profileAvatarUploadProgress.style.display = 'none';
+                }
+            }
+        }
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                closeModal(event.target.id);
+            }
+        }
+
+        window.toggleNavbar = function() {
+            document.getElementById('navbarNav').classList.toggle('hidden');
+            document.getElementById('navbarNav').classList.toggle('md:flex');
+        }
+
+        // --- Auth UI and Logic ---
         function updateLoginUI() {
             const deleteIdeaButtons = document.querySelectorAll('.delete-idea-btn-supabase');
             const deleteEventButtons = document.querySelectorAll('.delete-event-btn'); 
@@ -724,6 +785,7 @@
                 if (userProfileInfoDiv) userProfileInfoDiv.style.display = 'none';
             }
         }
+        window.updateLoginUI = updateLoginUI; 
         
         function showAuthModal(mode = 'login') {
             if (!authModalElement) return;
@@ -754,6 +816,8 @@
             }
             authModalElement.style.display = 'block';
         }
+        window.showAuthModal = showAuthModal; 
+
 
         if (switchToSignup) {
             switchToSignup.onclick = (e) => { e.preventDefault(); showAuthModal('signup'); };
@@ -871,112 +935,19 @@
                 showStaticModal("خطأ", `حدث خطأ أثناء تسجيل الخروج: ${error.message}`);
             }
         }
-
-        window.showModal = function(modalId) {
-            const modal = document.getElementById(modalId);
-            if (modal) modal.style.display = "block";
-        }
-        window.closeModal = function(modalId) {
-            const modal = document.getElementById(modalId);
-            if (modal) {
-                modal.style.display = "none";
-                if (modalId === 'authModal' && authErrorElement) { 
-                    authErrorElement.style.display = 'none';
-                }
-                if (modalId === 'profileModal' && profileUpdateStatus) {
-                    profileUpdateStatus.style.display = 'none';
-                    profileUpdateStatus.textContent = '';
-                    if(profileAvatarUploadProgress) profileAvatarUploadProgress.style.display = 'none';
-                }
-            }
-        }
-        window.onclick = function(event) {
-            if (event.target.classList.contains('modal')) {
-                closeModal(event.target.id);
-            }
-        }
-
-        function toggleNavbar() {
-            document.getElementById('navbarNav').classList.toggle('hidden');
-            document.getElementById('navbarNav').classList.toggle('md:flex');
-        }
-
-        const sections = document.querySelectorAll('section[id]');
-        const navLinks = document.querySelectorAll('#navbarNav .nav-link'); 
-        const navbarHeight = 70; 
-
-        window.addEventListener('scroll', () => {
-            let current = '';
-            sections.forEach(section => {
-                const sectionTop = section.offsetTop;
-                if (pageYOffset >= (sectionTop - navbarHeight - (section.clientHeight / 2) )) {
-                    current = section.getAttribute('id');
-                }
-            });
-
-            navLinks.forEach(link => {
-                link.classList.remove('active');
-                const linkHref = link.getAttribute('href');
-                if (linkHref && linkHref === `#${current}`) {
-                    link.classList.add('active');
-                }
-            });
-        });
-
-        const heroCanvas = document.getElementById('heroCanvas');
-        if (heroCanvas) {
-            const ctx = heroCanvas.getContext('2d');
-            let particlesArray;
-            function resizeCanvas() { heroCanvas.width = heroCanvas.offsetWidth; heroCanvas.height = heroCanvas.offsetHeight; }
-            resizeCanvas(); window.addEventListener('resize', resizeCanvas);
-            class Particle { 
-                constructor(x,y,dX,dY,s,c){this.x=x;this.y=y;this.directionX=dX;this.directionY=dY;this.size=s;this.color=c;}
-                draw(){ctx.beginPath();ctx.arc(this.x,this.y,this.size,0,Math.PI*2,false);ctx.fillStyle=this.color;ctx.fill();}
-                update(){if(this.x>heroCanvas.width||this.x<0){this.directionX=-this.directionX;}
-                if(this.y>heroCanvas.height||this.y<0){this.directionY=-this.directionY;}
-                this.x+=this.directionX;this.y+=this.directionY;this.draw();}}
-            function initParticles() { 
-                particlesArray=[];let n=(heroCanvas.height*heroCanvas.width)/12000;if(n>100)n=100;
-                for(let i=0;i<n;i++){let s=(Math.random()*1.5)+0.5;let x=Math.random()*heroCanvas.width;let y=Math.random()*heroCanvas.height;
-                let dX=(Math.random()*0.3)-0.15;let dY=(Math.random()*0.3)-0.15;let c=`rgba(0,200,255,${Math.random()*0.5+0.2})`;
-                particlesArray.push(new Particle(x,y,dX,dY,s,c));}}
-            function animateParticles() { 
-                requestAnimationFrame(animateParticles);ctx.clearRect(0,0,heroCanvas.width,heroCanvas.height);
-                for(let i=0;i<particlesArray.length;i++){particlesArray[i].update();}connectParticles();}
-            function connectParticles() { 
-                let oV;for(let a=0;a<particlesArray.length;a++){for(let b=a+1;b<particlesArray.length;b++){
-                let d=Math.sqrt(Math.pow(particlesArray[a].x-particlesArray[b].x,2)+Math.pow(particlesArray[a].y-particlesArray[b].y,2));
-                if(d<100){oV=1-(d/100);ctx.strokeStyle=`rgba(0,220,255,${oV*0.3})`;ctx.lineWidth=0.3;
-                ctx.beginPath();ctx.moveTo(particlesArray[a].x,particlesArray[a].y);ctx.lineTo(particlesArray[b].x,particlesArray[b].y);ctx.stroke();}}}}
-            window.addEventListener('resize', () => { resizeCanvas(); initParticles(); });
-            initParticles(); animateParticles();
-        }
-        // updateLoginUI(); // Called after supabase client is initialized in module script
-    </script>
-
-    <script type="module">
-        // --- إعداد Supabase ---
-        const SUPABASE_URL = 'https://uzcrjhhvwgllsdsvftuj.supabase.co'; 
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6Y3JqaGh2d2dsbHNkc3ZmdHVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMTcxNzcsImV4cCI6MjA2Mzc5MzE3N30.wy_ei_ZVJoMGbXMVqrW8NVUEgk2-EvPQYpgb9gWMW18';
-        
-        const { createClient } = window.supabase; 
-        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY); 
-
-        window.supabaseClient = supabase; // Make client available globally
-        console.log("Supabase client initialized:", window.supabaseClient);
         
         // --- مستمع المصادقة ---
         window.supabaseClient.auth.onAuthStateChange(async (event, session) => {
-            console.log("Auth event:", event, "Session:", session);
+            console.log("Auth event (from module):", event, "Session:", session);
             if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session && session.user) {
                 window.currentUser = session.user;
-                await fetchUserProfile(); // Fetch profile data on sign-in or initial session
+                await fetchUserProfile(); 
 
             } else if (event === 'SIGNED_OUT') {
                 window.currentUser = null;
             } else if (event === 'USER_UPDATED' && session && session.user) { 
                 window.currentUser = session.user; 
-                await fetchUserProfile(); // Re-fetch profile data if user object is updated
+                await fetchUserProfile(); 
             }
             
             if (typeof window.updateLoginUI === 'function') {
@@ -993,7 +964,7 @@
         async function fetchUserProfile() {
             if (!window.currentUser || !window.currentUser.id) {
                 console.log("fetchUserProfile: No current user or user ID.");
-                if (typeof window.updateLoginUI === 'function') window.updateLoginUI(); // Ensure UI reflects no user
+                if (typeof window.updateLoginUI === 'function') window.updateLoginUI(); 
                 return;
             }
             if (!window.supabaseClient) { console.error("Supabase client not available in fetchUserProfile"); return; }
@@ -1018,10 +989,11 @@
                  console.warn("User profile not found for:", window.currentUser.id, ". A new profile row should be created by the trigger if it doesn't exist. Assigning default role.");
                  window.currentUser.role = 'limited_user'; 
             }
-             if (typeof window.updateLoginUI === 'function') { // Update UI after fetching profile
+             if (typeof window.updateLoginUI === 'function') { 
                 window.updateLoginUI();
             }
         }
+        window.fetchUserProfile = fetchUserProfile; 
 
 
         async function checkInitialSession() {
@@ -1055,9 +1027,8 @@
 
         // --- قسم الأفكار (Ideas) ---
         const ideasTable = 'Flash'; 
-        const ideasContainer = document.getElementById('ideasContainer');
-        const loadingIdeasMsg = document.getElementById('loadingIdeas');
-
+        // const ideasContainer, loadingIdeasMsg are already defined in the global script
+        
         window.saveNewIdeaSupabase = async function(event) { 
             const saveIdeaButton = event.target.closest('button'); 
             console.log("SaveNewIdeaSupabase: Function called."); 
@@ -1210,9 +1181,7 @@
         // --- قسم الأحداث (Events) ---
         const eventsTable = 'project_events'; 
         const eventsStorageBucket = 'events-images'; 
-        const eventsContainer = document.getElementById('eventsContainer');
-        const loadingEventsMsg = document.getElementById('loadingEvents');
-        const localSaveEventButton = document.getElementById('saveEventButton'); 
+        // const eventsContainer, loadingEventsMsg, localSaveEventButton are already defined in the global script
 
         window.saveNewEvent = async function(event) { 
             const saveEventBtnInstance = event.target.closest('button');
@@ -1652,23 +1621,16 @@
 
 
         // --- دوال Gemini API (تبقى كما هي) ---
-        const modal = document.getElementById("infoModal"); 
-        const modalTitle = document.getElementById("modalTitle");
-        const modalText = document.getElementById("modalText");
-        const modalLoading = document.getElementById("modalLoading");
-        const projectDescriptionTextElement = document.getElementById("projectDescription");
-        const projectDescriptionText = projectDescriptionTextElement ? projectDescriptionTextElement.textContent : "وصف مشروع التوزيع الكهربي الذكي";
-        const technologiesListElement = document.getElementById("technologiesList");
+        // const modal, modalTitle, modalText, modalLoading are now generalInfoModal...
+        // const projectDescriptionTextElement, projectDescriptionText, technologiesListElement are defined above
 
-        window.showStaticModal = function(title, text) {  
-            if (!modal || !modalTitle || !modalText || !modalLoading) { console.error("Modal elements not found for showStaticModal"); return; }
-            modalTitle.textContent = title; modalText.innerHTML = text.replace(/\n/g, '<br>');
-            modalLoading.style.display = "none"; modalText.style.display = "block"; modal.style.display = "block";
-        };
-        function showModalForApi(title) { 
-            if (!modal || !modalTitle || !modalText || !modalLoading) { console.error("Modal elements not found for showModalForApi"); return;}
-            modalTitle.textContent = title; modalText.style.display = "none"; modalText.innerHTML = "";
-            modalLoading.style.display = "block"; modal.style.display = "block";
+        window.showModalForApi = function(title) { 
+            if (!generalInfoModal || !generalInfoModalTitle || !generalInfoModalText || !generalInfoModalLoading) { console.error("Modal elements not found for showModalForApi"); return;}
+            generalInfoModalTitle.textContent = title; 
+            generalInfoModalText.style.display = "none"; 
+            generalInfoModalText.innerHTML = "";
+            generalInfoModalLoading.style.display = "block"; 
+            generalInfoModal.style.display = "block";
          };
         
         const geminiApiKeyFromEnv = (typeof __gemini_api_key__ !== 'undefined' && __gemini_api_key__) ? __gemini_api_key__ : "";
@@ -1694,25 +1656,25 @@
          }
         window.generateAIIdeas = async function() { 
             const prompt = `بالنظر لوصف المشروع: "${projectDescriptionText}". اقترح 3-4 أفكار إبداعية لتطبيق الذكاء الاصطناعي لتحسين التوزيع الكهربي أو إضافة ميزات مبتكرة. قدمها كقائمة مرقمة مع شرح موجز بالعربية.`;
-            showModalForApi("✨ أفكار AI للمشروع"); const ideas = await callGeminiAPI(prompt);
-            if(modalText) modalText.innerHTML = ideas.replace(/\n/g, '<br>'); if(modalLoading) modalLoading.style.display = "none"; if(modalText) modalText.style.display = "block";
+            window.showModalForApi("✨ أفكار AI للمشروع"); const ideas = await callGeminiAPI(prompt);
+            if(generalInfoModalText) generalInfoModalText.innerHTML = ideas.replace(/\n/g, '<br>'); if(generalInfoModalLoading) generalInfoModalLoading.style.display = "none"; if(generalInfoModalText) generalInfoModalText.style.display = "block";
          };
         window.generateDetailedProjectDescription = async function() { 
             const prompt = `مشروعنا "التوزيع الكهربي الذكي: دمج التيار الخفيف، الأتمتة، والذكاء الاصطناعي". الوصف الحالي: "${projectDescriptionText}". أنشئ وصفًا تقنيًا مفصلاً (150-200 كلمة) بالعربية، يركز على الجوانب التقنية، المنهجيات، وابتكارات دمج AI، الأتمتة، والتيار الخفيف.`;
-            showModalForApi("✨ وصف تقني مفصل للمشروع"); const description = await callGeminiAPI(prompt);
-            if(modalText) modalText.innerHTML = description.replace(/\n/g, '<br>'); if(modalLoading) modalLoading.style.display = "none"; if(modalText) modalText.style.display = "block";
+            window.showModalForApi("✨ وصف تقني مفصل للمشروع"); const description = await callGeminiAPI(prompt);
+            if(generalInfoModalText) generalInfoModalText.innerHTML = description.replace(/\n/g, '<br>'); if(generalInfoModalLoading) generalInfoModalLoading.style.display = "none"; if(generalInfoModalText) generalInfoModalText.style.display = "block";
          };
         window.suggestAdditionalTechnologies = async function() { 
             let currentTechs = []; if (technologiesListElement) { const techBadges = technologiesListElement.querySelectorAll('.technology-badge'); techBadges.forEach(badge => currentTechs.push(badge.textContent.trim()));}
             const currentTechsString = currentTechs.join(', ') || "لا يوجد حاليا";
             const prompt = `مشروعنا يركز على "التوزيع الكهربي الذكي، التيار الخفيف، الأتمتة، والذكاء الاصطناعي". التقنيات الحالية: ${currentTechsString}. اقترح 2-3 تقنيات أو أدوات (برمجية/عتادية) إضافية متطورة ومحددة تكون مفيدة للمشروع، مع مبرر موجز لكل اقتراح بالعربية.`;
-            showModalForApi("✨ اقتراح تقنيات إضافية"); const suggestions = await callGeminiAPI(prompt);
-            if(modalText) modalText.innerHTML = suggestions.replace(/\n/g, '<br>'); if(modalLoading) modalLoading.style.display = "none"; if(modalText) modalText.style.display = "block";
+            window.showModalForApi("✨ اقتراح تقنيات إضافية"); const suggestions = await callGeminiAPI(prompt);
+            if(generalInfoModalText) generalInfoModalText.innerHTML = suggestions.replace(/\n/g, '<br>'); if(generalInfoModalLoading) generalInfoModalLoading.style.display = "none"; if(generalInfoModalText) generalInfoModalText.style.display = "block";
          };
         window.suggestTasksForVacantRole = async function(roleName) { 
             const prompt = `لفريق مشروع تخرج يعمل على "التوزيع الكهربي الذكي بدمج التيار الخفيف، الأتمتة، والذكاء الاصطناعي"، لدينا ${roleName} شاغر. اقترح 3-4 مهام ومسؤوليات محددة وعملية لعضو جديد في هذا الدور، تساهم في تقدم المشروع. قدمها كقائمة مرقمة بالعربية.`;
-            showModalForApi(`✨ مهام مقترحة لـ ${roleName}`); const tasks = await callGeminiAPI(prompt);
-            if(modalText) modalText.innerHTML = tasks.replace(/\n/g, '<br>'); if(modalLoading) modalLoading.style.display = "none"; if(modalText) modalText.style.display = "block";
+            window.showModalForApi(`✨ مهام مقترحة لـ ${roleName}`); const tasks = await callGeminiAPI(prompt);
+            if(generalInfoModalText) generalInfoModalText.innerHTML = tasks.replace(/\n/g, '<br>'); if(generalInfoModalLoading) generalInfoModalLoading.style.display = "none"; if(generalInfoModalText) generalInfoModalText.style.display = "block";
          };
         
         // استدعاء عند تحميل الصفحة
