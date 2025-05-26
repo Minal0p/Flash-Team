@@ -321,6 +321,64 @@
             display: none;
         }
 
+        /* Comment Section Styles */
+        .comments-section {
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid #333;
+        }
+        .comment {
+            background-color: #282828;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            margin-bottom: 0.75rem;
+            border-left: 3px solid #0077cc;
+        }
+        .comment p { margin-bottom: 0.25rem; }
+        .comment .commenter-name { font-weight: 600; color: #00aaff; }
+        .comment .comment-date { font-size: 0.75rem; color: #888; }
+        .comment-form input, .comment-form textarea {
+             margin-bottom: 0.5rem;
+        }
+        /* Reaction Buttons */
+        .reaction-buttons {
+            display: flex;
+            gap: 0.5rem; /* Space between buttons */
+            margin-top: 0.5rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid #33333350;
+        }
+        .reaction-btn {
+            background-color: #333;
+            color: #ccc;
+            border: 1px solid #444;
+            padding: 0.3rem 0.6rem;
+            border-radius: 15px; /* Pill shape */
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+        }
+        .reaction-btn:hover {
+            background-color: #444;
+            border-color: #555;
+            color: #fff;
+        }
+        .reaction-btn.active { /* Style for when user has selected this reaction */
+            background-color: #00aaff;
+            color: #121212;
+            border-color: #00aaff;
+        }
+        .reaction-btn .emoji {
+            margin-right: 0.3rem; /* Space between emoji and count */
+            font-size: 1rem; /* Slightly larger emoji */
+        }
+        .reaction-btn .count {
+            font-size: 0.75rem;
+        }
+
 
         @media (max-width: 768px) {
             .hero-content h1 { font-size: 2.5rem; }
@@ -330,7 +388,7 @@
             .sm\:space-x-4 > :not([hidden]) ~ :not([hidden]) { margin-right: 0 !important; margin-left: 0 !important; }
             .sm\:space-x-4 button, .sm\:space-x-4 a.btn { width: 100%; margin-bottom: 0.75rem; }
             .navbar-nav {
-                background-color: #141414;
+                background-color: #141414; /* Darker background for mobile nav dropdown */
                 border-radius: 8px; margin-top: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.3);
                 padding: 0.5rem 0;
             }
@@ -929,6 +987,7 @@
             try {
                 const { error } = await window.supabaseClient.auth.signOut();
                 if (error) throw error;
+                // window.currentUser = null; // onAuthStateChange will handle this
                 showStaticModal("تسجيل الخروج", "تم تسجيل خروجك بنجاح.");
             } catch (error) {
                 console.error("Error logging out:", error);
@@ -938,18 +997,29 @@
         
         // --- مستمع المصادقة ---
         window.supabaseClient.auth.onAuthStateChange(async (event, session) => {
-            console.log("Auth event (from module):", event, "Session:", session);
+            console.log("Auth event (from module):", event, "Session:", JSON.stringify(session)); // Log session for detail
             if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session && session.user) {
+                console.log("Auth event - User signed in or session restored. User ID:", session.user.id);
                 window.currentUser = session.user;
                 await fetchUserProfile(); 
 
             } else if (event === 'SIGNED_OUT') {
+                console.log("Auth event - User signed out.");
                 window.currentUser = null;
+                 // عند تسجيل الخروج، تأكد من تحديث الواجهة لتعكس ذلك
+                if (typeof window.updateLoginUI === 'function') {
+                    window.updateLoginUI(); 
+                }
             } else if (event === 'USER_UPDATED' && session && session.user) { 
+                console.log("Auth event - User updated. User ID:", session.user.id);
                 window.currentUser = session.user; 
                 await fetchUserProfile(); 
+            } else if (event === 'INITIAL_SESSION' && !session) {
+                console.log("Auth event - Initial session, no user.");
+                window.currentUser = null;
             }
             
+            // استدعاء الدوال بعد تحديث currentUser
             if (typeof window.updateLoginUI === 'function') {
                 window.updateLoginUI(); 
             }
@@ -963,7 +1033,8 @@
         
         async function fetchUserProfile() {
             if (!window.currentUser || !window.currentUser.id) {
-                console.log("fetchUserProfile: No current user or user ID.");
+                console.log("fetchUserProfile: No current user or user ID. Updating UI to reflect signed-out state.");
+                window.currentUser = null; // Ensure it's explicitly null if no user/id
                 if (typeof window.updateLoginUI === 'function') window.updateLoginUI(); 
                 return;
             }
@@ -977,16 +1048,16 @@
                 .single();
 
             if (profileError && profileError.code !== 'PGRST116') { 
-                console.error("Error fetching user profile:", profileError);
+                console.error("Error fetching user profile:", profileError, "User ID:", window.currentUser.id);
                 window.currentUser.role = 'limited_user'; 
             } else if (profileData) {
-                console.log("fetchUserProfile: Profile data found:", profileData);
+                console.log("fetchUserProfile: Profile data found for user ID:", window.currentUser.id, "Data:", profileData);
                 window.currentUser.role = profileData.role || 'limited_user';
                 window.currentUser.academic_id_profile = profileData.academic_id; 
                 window.currentUser.full_name_profile = profileData.full_name;
                 window.currentUser.avatar_url = profileData.avatar_url;
             } else {
-                 console.warn("User profile not found for:", window.currentUser.id, ". A new profile row should be created by the trigger if it doesn't exist. Assigning default role.");
+                 console.warn("User profile not found for:", window.currentUser.id, ". A new profile row should be created by the trigger. Assigning default role 'limited_user'.");
                  window.currentUser.role = 'limited_user'; 
             }
              if (typeof window.updateLoginUI === 'function') { 
@@ -997,24 +1068,42 @@
 
 
         async function checkInitialSession() {
+            console.log("checkInitialSession: Starting...");
             if (!window.supabaseClient) {
                 console.error("Supabase client not available in checkInitialSession");
                 if (window.supabase && typeof window.supabase.createClient === 'function') {
                      window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                      console.log("Supabase client re-initialized in checkInitialSession:", window.supabaseClient);
                 } else {
+                    if (typeof window.updateLoginUI === 'function') {
+                        window.currentUser = null; 
+                        window.updateLoginUI();
+                    }
                     return; 
                 }
             }
-            const { data: { session } } = await window.supabaseClient.auth.getSession();
-            if (session && session.user) { 
-                window.currentUser = session.user;
-                await fetchUserProfile(); 
-            } else {
+            try {
+                const { data: { session }, error: sessionError } = await window.supabaseClient.auth.getSession();
+                if(sessionError){
+                    console.error("checkInitialSession - Error getting session:", sessionError);
+                    window.currentUser = null;
+                } else if (session && session.user) { 
+                    window.currentUser = session.user;
+                    console.log("checkInitialSession - User found in session, fetching profile for:", window.currentUser.id);
+                    await fetchUserProfile(); 
+                } else {
+                    console.log("checkInitialSession - No active session found.");
+                    window.currentUser = null;
+                }
+            } catch (e) {
+                console.error("checkInitialSession - Exception during getSession:", e);
                 window.currentUser = null;
             }
 
+
+            // استدعاء تحديث الواجهة دائمًا بعد التحقق من الجلسة
             if (typeof window.updateLoginUI === 'function') {
+                console.log("checkInitialSession: Calling updateLoginUI. Current user:", window.currentUser);
                 window.updateLoginUI();
             }
             if (typeof window.loadIdeasSupabase === 'function') {
@@ -1023,11 +1112,11 @@
             if (typeof window.loadEvents === 'function') { 
                  window.loadEvents();
             }
+             console.log("checkInitialSession: Finished.");
         }
 
         // --- قسم الأفكار (Ideas) ---
         const ideasTable = 'Flash'; 
-        // const ideasContainer, loadingIdeasMsg are already defined in the global script
         
         window.saveNewIdeaSupabase = async function(event) { 
             const saveIdeaButton = event.target.closest('button'); 
@@ -1347,6 +1436,43 @@
 
                         const canDelete = window.currentUser && window.currentUser.id === event.user_id && (window.currentUser.role === 'full_access_user' || window.currentUser.role === 'admin');
 
+                        // HTML for reaction buttons
+                        const reactionTypes = [
+                            { type: 'like', emoji: '👍' }, { type: 'love', emoji: '❤️' },
+                            { type: 'laugh', emoji: '😂' }, { type: 'wow', emoji: '😮' },
+                            { type: 'sad', emoji: '😢' }, { type: 'angry', emoji: '😠' }
+                        ];
+                        let reactionButtonsHTML = '<div class="reaction-buttons">';
+                        reactionTypes.forEach(reaction => {
+                            reactionButtonsHTML += `
+                                <button onclick="handleReaction(${event.id}, '${reaction.type}', this)" class="reaction-btn" data-reaction-type="${reaction.type}">
+                                    <span class="emoji">${reaction.emoji}</span>
+                                    <span class="count reaction-count-${event.id}-${reaction.type}">0</span>
+                                </button>
+                            `;
+                        });
+                        reactionButtonsHTML += '</div>';
+
+                        // HTML for comments section
+                        const commentsSectionHTML = `
+                            <div class="comments-section mt-4 pt-4 border-t border-gray-700">
+                                <h5 class="text-md font-semibold mb-2 text-gray-300">التعليقات (<span class="comment-count-${event.id}">0</span>)</h5>
+                                <div class="event-comments-list-${event.id} mb-4 max-h-48 overflow-y-auto">
+                                    <p class="text-sm text-gray-500 no-comments-yet-${event.id}">لا توجد تعليقات بعد. كن أول من يعلق!</p> 
+                                </div>
+                                <div class="add-comment-form mt-4">
+                                    <h6 class="text-sm font-semibold mb-1 text-gray-300">أضف تعليقك:</h6>
+                                    <input type="text" placeholder="اسمك (مطلوب)" class="form-input comment-name-input-${event.id} text-sm p-2 mb-1" ${window.currentUser ? 'style="display:none;"' : ''}>
+                                    <input type="email" placeholder="بريدك الإلكتروني (مطلوب)" class="form-input comment-email-input-${event.id} text-sm p-2 mb-1" ${window.currentUser ? 'style="display:none;"' : ''}>
+                                    <textarea placeholder="اكتب تعليقك هنا..." rows="2" class="form-textarea comment-text-input-${event.id} text-sm p-2 mb-1"></textarea>
+                                    <button onclick="saveNewComment(${event.id}, this.closest('.event-card'))" class="btn btn-secondary btn-sm py-1 px-3 comment-submit-button">
+                                        <i class="fas fa-paper-plane mr-1"></i>إرسال
+                                    </button>
+                                    <p class="comment-status-message-${event.id} text-xs mt-1" style="display:none;"></p>
+                                </div>
+                            </div>
+                        `;
+
                         eventElement.innerHTML = `
                             <div>
                                 ${imageHtml}
@@ -1354,14 +1480,23 @@
                                 <p class="text-sm text-gray-400 mb-1">تاريخ الحدث: ${eventDateFormatted}</p>
                                 <p class="text-gray-300 mb-3 leading-relaxed">${event.description.replace(/\n/g, '<br>')}</p>
                             </div>
+                            ${reactionButtonsHTML}
                             <div class="mt-auto pt-3 border-t border-gray-700 flex justify-between items-center">
                                 <p class="text-xs text-gray-500">أضيف بواسطة: ${authorName}</p>
                                 ${canDelete ? `<button onclick="deleteEvent('${event.id}', ${event.image_url ? `'${event.image_url}'` : null})" class="btn btn-danger btn-sm text-xs py-1 px-2 flex items-center delete-event-btn">
                                     <i class="fas fa-trash-alt mr-1"></i> حذف
                                 </button>` : ''}
                             </div>
+                            ${commentsSectionHTML}
                         `;
                         eventsContainer.appendChild(eventElement);
+                        
+                        const commentsListEl = eventElement.querySelector(`.event-comments-list-${event.id}`);
+                        const commentCountEl = eventElement.querySelector(`.comment-count-${event.id}`);
+                        const noCommentsEl = commentsListEl ? commentsListEl.querySelector(`.no-comments-yet-${event.id}`) : null; 
+                        
+                        loadCommentsForEvent(event.id, commentsListEl, commentCountEl, noCommentsEl);
+                        loadReactionsForEvent(event.id, eventElement);
                     }
                 }
             } catch (error) {
@@ -1371,6 +1506,7 @@
                 if(loadingEventsMsg) loadingEventsMsg.style.display = 'none';
             }
         }
+        window.loadEvents = loadEvents; 
 
         window.deleteEvent = async function(eventId, imageUrl) {
             if (!window.currentUser) { if (window.showStaticModal) window.showStaticModal("خطأ", "يجب تسجيل الدخول للحذف."); return; }
@@ -1530,7 +1666,7 @@
                 window.currentUser.academic_id_profile = academicId;
                 window.currentUser.avatar_url = avatarPublicUrl;
                 
-                await fetchUserProfile(); //  إعادة جلب الملف الشخصي لتحديث الدور إذا تم تغييره
+                await fetchUserProfile(); 
                 
                 if(profileUpdateStatus) {
                     profileUpdateStatus.textContent = 'تم حفظ التغييرات بنجاح!';
@@ -1619,9 +1755,314 @@
              setTimeout(() => { if(referralStatusDiv) referralStatusDiv.style.display = 'none';}, 4000);
         }
 
+        // --- Comment Functions ---
+        const commentsTable = 'event_comments';
+
+        async function loadCommentsForEvent(eventId, commentsListElement, commentCountElement, noCommentsYetElement) {
+            let errorMessage = "";
+            if (!window.supabaseClient) errorMessage += "Supabase client is not available. ";
+            if (!commentsListElement) errorMessage += `commentsListElement for event ID ${eventId} not found. `;
+            if (!commentCountElement) errorMessage += `commentCountElement for event ID ${eventId} not found. `;
+            if (!noCommentsYetElement) errorMessage += `noCommentsYetElement for event ID ${eventId} not found. `;
+
+            if (errorMessage) {
+                console.error("Error in loadCommentsForEvent prerequisites: " + errorMessage + "Event ID:", eventId);
+                if(commentsListElement) commentsListElement.innerHTML = `<p class="text-red-500 text-xs">خطأ في تهيئة قسم التعليقات.</p>`;
+                return;
+            }
+            
+            try {
+                const { data: comments, error } = await window.supabaseClient
+                    .from(commentsTable)
+                    .select('id, commenter_name, commenter_email, comment_text, created_at, user_id')
+                    .eq('event_id', eventId)
+                    .order('created_at', { ascending: true });
+
+                if (error) throw error;
+
+                commentsListElement.innerHTML = ''; 
+                commentCountElement.textContent = comments.length;
+
+                if (comments.length === 0) {
+                    noCommentsYetElement.style.display = 'block';
+                } else {
+                    noCommentsYetElement.style.display = 'none';
+                    comments.forEach(comment => {
+                        const commentDiv = document.createElement('div');
+                        commentDiv.className = 'comment';
+                        const commentDate = comment.created_at ? new Date(comment.created_at).toLocaleString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'غير معروف';
+                        
+                        let deleteButtonHtml = '';
+                        if (window.currentUser && window.currentUser.id === comment.user_id) {
+                            deleteButtonHtml = `<button onclick="deleteComment(${comment.id}, ${eventId}, this.closest('.event-card'))" class="text-red-400 hover:text-red-600 text-xs ml-auto self-start"><i class="fas fa-trash-alt"></i></button>`;
+                        }
+
+                        commentDiv.innerHTML = `
+                            <div class="flex justify-between items-start">
+                                <p><strong class="commenter-name">${comment.commenter_name || 'مجهول'}</strong> <span class="text-xs text-gray-500">(${comment.commenter_email || 'لا يوجد بريد'})</span></p>
+                                ${deleteButtonHtml}
+                            </div>
+                            <p class="text-gray-300 text-sm">${comment.comment_text.replace(/\n/g, '<br>')}</p>
+                            <p class="comment-date">${commentDate}</p>
+                        `;
+                        commentsListElement.appendChild(commentDiv);
+                    });
+                }
+            } catch (error) {
+                console.error(`Error loading comments for event ${eventId}:`, error);
+                commentsListElement.innerHTML = `<p class="text-red-400 text-sm">خطأ في تحميل التعليقات.</p>`;
+                noCommentsYetElement.style.display = 'none';
+            }
+        }
+        window.loadCommentsForEvent = loadCommentsForEvent;
+
+        window.saveNewComment = async function(eventId, eventCardElement) {
+            if (!window.supabaseClient) {
+                showStaticModal("خطأ", "Supabase client غير مهيأ.");
+                return;
+            }
+
+            const nameInput = eventCardElement.querySelector(`.comment-name-input-${eventId}`);
+            const emailInputEl = eventCardElement.querySelector(`.comment-email-input-${eventId}`);
+            const textInput = eventCardElement.querySelector(`.comment-text-input-${eventId}`);
+            const statusMessage = eventCardElement.querySelector(`.comment-status-message-${eventId}`);
+
+            const commentText = textInput.value.trim();
+            let commenterName = nameInput.value.trim();
+            let commenterEmail = emailInputEl.value.trim();
+            let userId = null;
+
+            if (window.currentUser && window.currentUser.id) {
+                userId = window.currentUser.id;
+                commenterName = window.currentUser.full_name_profile || window.currentUser.email.split('@')[0];
+                commenterEmail = window.currentUser.email;
+                nameInput.style.display = 'none';
+                emailInputEl.style.display = 'none';
+            } else {
+                nameInput.style.display = 'block';
+                emailInputEl.style.display = 'block';
+                if (!commenterName || !commenterEmail) {
+                    statusMessage.textContent = 'الرجاء إدخال الاسم والبريد الإلكتروني.';
+                    statusMessage.className = 'comment-status-message text-xs mt-1 text-red-400';
+                    statusMessage.style.display = 'block';
+                    setTimeout(() => statusMessage.style.display = 'none', 3000);
+                    return;
+                }
+            }
+
+            if (!commentText) {
+                statusMessage.textContent = 'الرجاء كتابة نص التعليق.';
+                statusMessage.className = 'comment-status-message text-xs mt-1 text-red-400';
+                statusMessage.style.display = 'block';
+                setTimeout(() => statusMessage.style.display = 'none', 3000);
+                return;
+            }
+
+            const commentData = {
+                event_id: eventId,
+                user_id: userId, 
+                commenter_name: commenterName,
+                commenter_email: commenterEmail,
+                comment_text: commentText
+            };
+
+            console.log("Attempting to save comment:", commentData);
+
+            try {
+                const { error } = await window.supabaseClient
+                    .from('event_comments')
+                    .insert([commentData]);
+
+                if (error) throw error;
+
+                statusMessage.textContent = 'تم إرسال التعليق بنجاح!';
+                statusMessage.className = 'comment-status-message text-xs mt-1 text-green-400';
+                statusMessage.style.display = 'block';
+                textInput.value = '';
+                if (!window.currentUser) { 
+                    nameInput.value = '';
+                    emailInputEl.value = '';
+                }
+                setTimeout(() => statusMessage.style.display = 'none', 3000);
+                
+                if (typeof window.loadEvents === 'function') {
+                    window.loadEvents(); // Reload all events to refresh comments
+                }
+
+            } catch (error) {
+                console.error('Error saving comment:', error);
+                statusMessage.textContent = `فشل إرسال التعليق: ${error.message}`;
+                statusMessage.className = 'comment-status-message text-xs mt-1 text-red-400';
+                statusMessage.style.display = 'block';
+                setTimeout(() => statusMessage.style.display = 'none', 5000);
+            }
+        }
+        window.saveNewComment = saveNewComment;
+
+        window.deleteComment = async function(commentId, eventId, eventCardElement) {
+            if (!window.currentUser || !window.supabaseClient) {
+                showStaticModal("خطأ", "يجب تسجيل الدخول لحذف التعليقات.");
+                return;
+            }
+            
+            const confirmed = await new Promise(resolve => {
+                window.showStaticModal("تأكيد الحذف", "هل أنت متأكد أنك تريد حذف هذا التعليق؟<br><br><div class='flex justify-center space-x-3 space-x-reverse'><button id='confirmDeleteCommentBtn' class='btn btn-danger'>نعم، احذف</button><button id='cancelDeleteCommentBtn' class='btn btn-secondary'>إلغاء</button></div>");
+                document.getElementById('confirmDeleteCommentBtn').onclick = () => { window.closeModal('infoModal'); resolve(true); };
+                document.getElementById('cancelDeleteCommentBtn').onclick = () => { window.closeModal('infoModal'); resolve(false); };
+            });
+            if (!confirmed) return;
+
+            try {
+                const { error } = await window.supabaseClient
+                    .from('event_comments')
+                    .delete()
+                    .match({ id: commentId, user_id: window.currentUser.id }); 
+
+                if (error) throw error;
+
+                showStaticModal("نجاح", "تم حذف التعليق.");
+                
+                if (typeof window.loadEvents === 'function') { // Reload events to refresh comments
+                    window.loadEvents();
+                }
+
+            } catch (error) {
+                console.error('Error deleting comment:', error);
+                showStaticModal("خطأ", `فشل حذف التعليق: ${error.message}`);
+            }
+        }
+        window.deleteComment = deleteComment;
+
+        // --- Reaction Functions ---
+        const reactionsTable = 'event_reactions';
+        const reactionTypes = ['like', 'love', 'laugh', 'wow', 'sad', 'angry'];
+        const reactionEmojis = {
+            like: '👍', love: '❤️', laugh: '😂', wow: '😮', sad: '😢', angry: '😠'
+        };
+
+        async function loadReactionsForEvent(eventId, eventCardElement) {
+            if (!window.supabaseClient || !eventCardElement) {
+                 console.error(`loadReactionsForEvent: Missing Supabase client or eventCardElement for event ID ${eventId}.`);
+                 return;
+            }
+            console.log(`Loading reactions for event ID: ${eventId}`);
+
+            try {
+                // 1. Get all reactions for the event to calculate counts
+                const { data: allReactions, error: reactionsError } = await window.supabaseClient
+                    .from(reactionsTable)
+                    .select('reaction_type, user_id')
+                    .eq('event_id', eventId);
+
+                if (reactionsError) throw reactionsError;
+
+                // Initialize counts
+                const reactionCounts = {};
+                reactionTypes.forEach(type => reactionCounts[type] = 0);
+
+                // Calculate counts
+                if (allReactions) {
+                    allReactions.forEach(reaction => {
+                        if (reactionCounts.hasOwnProperty(reaction.reaction_type)) {
+                            reactionCounts[reaction.reaction_type]++;
+                        }
+                    });
+                }
+
+                // Update counts on buttons
+                reactionTypes.forEach(type => {
+                    const countEl = eventCardElement.querySelector(`.reaction-count-${eventId}-${type}`);
+                    if (countEl) {
+                        countEl.textContent = reactionCounts[type] || '0';
+                    } else {
+                        console.warn(`Count element .reaction-count-${eventId}-${type} not found.`);
+                    }
+                    const btnEl = eventCardElement.querySelector(`button[data-reaction-type="${type}"]`);
+                    if (btnEl) {
+                        btnEl.classList.remove('active'); // Reset active state
+                    } else {
+                         console.warn(`Button element for reaction type ${type} not found for event ${eventId}.`);
+                    }
+                });
+
+                // 2. Check if current user has reacted and highlight their reaction
+                if (window.currentUser && window.currentUser.id) {
+                    const userSpecificReaction = allReactions.find(r => r.user_id === window.currentUser.id);
+                    if (userSpecificReaction) {
+                        const activeBtn = eventCardElement.querySelector(`button[data-reaction-type="${userSpecificReaction.reaction_type}"]`);
+                        if (activeBtn) {
+                            activeBtn.classList.add('active');
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error(`Error loading reactions for event ${eventId}:`, error);
+            }
+        }
+        window.loadReactionsForEvent = loadReactionsForEvent;
+        
+        window.handleReaction = async function(eventId, reactionType, buttonElement) {
+            if (!window.currentUser) {
+                showStaticModal("مطلوب تسجيل الدخول", "يجب تسجيل الدخول للتفاعل مع المنشورات.");
+                showAuthModal('login');
+                return;
+            }
+            if (!window.supabaseClient) {
+                console.error("Supabase client not available for handling reaction.");
+                return;
+            }
+
+            const userId = window.currentUser.id;
+            const eventCardElement = buttonElement.closest('.event-card');
+
+            try {
+                const { data: existingReaction, error: fetchError } = await window.supabaseClient
+                    .from(reactionsTable)
+                    .select('*')
+                    .eq('event_id', eventId)
+                    .eq('user_id', userId)
+                    .single();
+
+                if (fetchError && fetchError.code !== 'PGRST116') { 
+                    throw fetchError;
+                }
+
+                if (existingReaction) {
+                    if (existingReaction.reaction_type === reactionType) {
+                        const { error: deleteError } = await window.supabaseClient
+                            .from(reactionsTable)
+                            .delete()
+                            .match({ event_id: eventId, user_id: userId });
+                        if (deleteError) throw deleteError;
+                    } else {
+                        const { error: updateError } = await window.supabaseClient
+                            .from(reactionsTable)
+                            .update({ reaction_type: reactionType, created_at: new Date().toISOString() })
+                            .match({ event_id: eventId, user_id: userId });
+                        if (updateError) throw updateError;
+                    }
+                } else {
+                    const { error: insertError } = await window.supabaseClient
+                        .from(reactionsTable)
+                        .insert({
+                            event_id: eventId,
+                            user_id: userId,
+                            reaction_type: reactionType
+                        });
+                    if (insertError) throw insertError;
+                }
+                loadReactionsForEvent(eventId, eventCardElement);
+
+            } catch (error) {
+                console.error("Error handling reaction:", error);
+                showStaticModal("خطأ", `فشل تسجيل التفاعل: ${error.message}`);
+            }
+        }
+        window.handleReaction = handleReaction;
+
 
         // --- دوال Gemini API (تبقى كما هي) ---
-        // const modal, modalTitle, modalText, modalLoading are now generalInfoModal...
+        // const generalInfoModal, generalInfoModalTitle, generalInfoModalText, generalInfoModalLoading are defined above
         // const projectDescriptionTextElement, projectDescriptionText, technologiesListElement are defined above
 
         window.showModalForApi = function(title) { 
