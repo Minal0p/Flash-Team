@@ -343,20 +343,22 @@
         /* Reaction Buttons */
         .reaction-buttons {
             display: flex;
-            gap: 0.5rem; /* Space between buttons */
+            gap: 0.3rem; /* Reduced gap for smaller screens */
             margin-top: 0.5rem;
             margin-bottom: 1rem;
             padding-bottom: 0.75rem;
             border-bottom: 1px solid #33333350;
+            flex-wrap: wrap; /* Allow buttons to wrap */
+            justify-content: flex-start; /* Align to start on wrap */
         }
         .reaction-btn {
             background-color: #333;
             color: #ccc;
             border: 1px solid #444;
-            padding: 0.3rem 0.6rem;
-            border-radius: 15px; /* Pill shape */
+            padding: 0.2rem 0.5rem; /* Reduced padding */
+            border-radius: 15px; 
             cursor: pointer;
-            font-size: 0.8rem;
+            font-size: 0.7rem; /* Reduced font size */
             transition: all 0.2s ease;
             display: inline-flex;
             align-items: center;
@@ -366,17 +368,17 @@
             border-color: #555;
             color: #fff;
         }
-        .reaction-btn.active { /* Style for when user has selected this reaction */
+        .reaction-btn.active { 
             background-color: #00aaff;
             color: #121212;
             border-color: #00aaff;
         }
         .reaction-btn .emoji {
-            margin-right: 0.3rem; /* Space between emoji and count */
-            font-size: 1rem; /* Slightly larger emoji */
+            margin-right: 0.2rem; /* Reduced margin */
+            font-size: 0.9rem; /* Reduced emoji size */
         }
         .reaction-btn .count {
-            font-size: 0.75rem;
+            font-size: 0.65rem; /* Reduced count size */
         }
 
 
@@ -388,11 +390,23 @@
             .sm\:space-x-4 > :not([hidden]) ~ :not([hidden]) { margin-right: 0 !important; margin-left: 0 !important; }
             .sm\:space-x-4 button, .sm\:space-x-4 a.btn { width: 100%; margin-bottom: 0.75rem; }
             .navbar-nav {
-                background-color: #141414; /* Darker background for mobile nav dropdown */
+                background-color: #141414; 
                 border-radius: 8px; margin-top: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.3);
                 padding: 0.5rem 0;
             }
              .nav-link, .auth-link { display: block; width: 100%; text-align: center; }
+            /* Team members grid for smaller screens */
+            #team .grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)); /* 2 columns on small screens */
+            }
+             @media (max-width: 480px) { /* Even smaller screens */
+                 #team .grid {
+                    grid-template-columns: repeat(1, minmax(0, 1fr)); /* 1 column on very small screens */
+                }
+                .reaction-buttons {
+                    justify-content: center; /* Center buttons if they wrap */
+                }
+             }
         }
     </style>
 </head>
@@ -509,11 +523,11 @@
                 يهدف مشروعنا إلى إحداث ثورة في أنظمة التوزيع الكهربي التقليدية من خلال دمج أحدث التقنيات في مجالات التيار الخفيف، الأتمتة المتقدمة، وتطبيقات الذكاء الاصطناعي. نسعى لتصميم وتنفيذ نظام توزيع كهربي فائق الكفاءة، يتميز بالاستدامة، القدرة على التكيف، وتوفير حلول مبتكرة لإدارة الشبكات الكهربية الذكية لمستقبل أكثر إشراقًا.
             </p>
             <div class="mt-10 text-center space-y-4 sm:space-y-0 sm:space-x-4 sm:space-x-reverse flex flex-col sm:flex-row justify-center items-center">
-                <button onclick="generateAIIdeas()" class="btn btn-secondary">
-                    <i class="fas fa-lightbulb mr-2"></i> ✨ أفكار للمشروع
+                <button onclick="showStaticModal('أفكار للمشروع', 'سيتم عرض أفكار المشروع هنا قريبًا.')" class="btn btn-secondary">
+                    <i class="fas fa-lightbulb mr-2"></i> أفكار للمشروع
                 </button>
-                 <button onclick="generateDetailedProjectDescription()" class="btn btn-ai-feature">
-                    <i class="fas fa-file-alt mr-2"></i> ✨ وصف تقني مفصل
+                 <button onclick="showStaticModal('وصف تقني مفصل', 'سيتم عرض الوصف التقني المفصل هنا قريبًا.')" class="btn btn-ai-feature">
+                    <i class="fas fa-file-alt mr-2"></i> وصف تقني مفصل
                 </button>
                 <button onclick="showStaticModal('تفاصيل إضافية عن المشروع', 'سنقوم قريبًا بإضافة المزيد من التفاصيل التقنية، المخططات، وأهداف المشروع المرحلية. تابعونا!')" class="btn btn-primary">
                     <i class="fas fa-info-circle mr-2"></i> المزيد (قريباً)
@@ -587,7 +601,7 @@
                 >
                 <p class="text-sm text-gray-400 mt-2">سيتم تحديث هذه الصورة بصورة الفريق الفعلية.</p>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-8">
+            <div id="teamGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-8">
                 <script>
                     const teamMembers = [
                         { name: "مينا حنا فهيم", role: "قائد الفريق", imgInitial: "م.ح" }, { name: "مينا فليب لبيب", role: "مهندس تصميم", imgInitial: "م.ف" },
@@ -602,25 +616,33 @@
                     teamMembers.forEach((member, index) => {
                         memberHtml += `
                         <div class="team-member-card p-6 rounded-lg text-center" style="--animation-delay: ${index * 0.05}s; opacity:0; animation: slideInUp 0.5s ease-out forwards;">
-                            <img src="https://placehold.co/120x120/1a1a1a/00f0ff?text=${encodeURIComponent(member.imgInitial)}&font=cairo" alt="صورة ${member.name}" class="w-28 h-28 rounded-full mx-auto mb-4 border-4 shadow-md">
-                            <h3 class="text-xl font-bold mb-1">${member.name}</h3>
-                            <p class="font-semibold text-sm">${member.role}</p>
+                            <img src="https://placehold.co/120x120/1a1a1a/00f0ff?text=${encodeURIComponent(member.imgInitial)}&font=cairo" alt="صورة ${member.name}" class="w-24 h-24 sm:w-28 sm:h-28 rounded-full mx-auto mb-4 border-4 shadow-md">
+                            <h3 class="text-lg sm:text-xl font-bold mb-1">${member.name}</h3>
+                            <p class="font-semibold text-xs sm:text-sm">${member.role}</p>
                         </div>`;
                     });
                     for (let i = 0; i < vacantSpots; i++) {
                         memberHtml += `
                         <div class="team-member-card p-6 rounded-lg text-center bg-gray-700 bg-opacity-20 border-gray-600" style="--animation-delay: ${(teamMembers.length + i) * 0.05}s; opacity:0; animation: slideInUp 0.5s ease-out forwards;">
                             <div>
-                                <img src="https://placehold.co/120x120/333333/888888?text=؟${i+1}&font=cairo" alt="مكان شاغر ${i+1}" class="w-28 h-28 rounded-full mx-auto mb-4 border-4 border-gray-500 shadow-md">
-                                <h3 class="text-xl font-bold text-gray-300 mb-1">مكان شاغر ${i+1}</h3>
-                                <p class="text-gray-400 mb-3 text-sm">انضم إلينا!</p>
+                                <img src="https://placehold.co/120x120/333333/888888?text=؟${i+1}&font=cairo" alt="مكان شاغر ${i+1}" class="w-24 h-24 sm:w-28 sm:h-28 rounded-full mx-auto mb-4 border-4 border-gray-500 shadow-md">
+                                <h3 class="text-lg sm:text-xl font-bold text-gray-300 mb-1">مكان شاغر ${i+1}</h3>
+                                <p class="text-gray-400 mb-3 text-xs sm:text-sm">انضم إلينا!</p>
                             </div>
-                            <button onclick="suggestTasksForVacantRole('مكان شاغر ${i+1}')" class="btn btn-secondary text-xs py-2 px-3 w-full mt-auto">
-                               <i class="fas fa-tasks mr-1"></i> ✨ اقتراح مهام
+                            <button onclick="showStaticModal('اقتراح مهام', 'ميزة اقتراح المهام غير متاحة حاليًا.')" class="btn btn-secondary text-xs py-2 px-3 w-full mt-auto">
+                               <i class="fas fa-info-circle mr-1"></i> تفاصيل
                             </button>
                         </div>`;
                     }
-                    document.currentScript.parentNode.innerHTML = memberHtml;
+                    // Use a more robust way to select the parent if document.currentScript is null (e.g., in modules or strict mode)
+                    const teamGridElement = document.getElementById('teamGrid');
+                    if (teamGridElement) {
+                        teamGridElement.innerHTML = memberHtml;
+                    } else if (document.currentScript) {
+                         document.currentScript.parentNode.innerHTML = memberHtml;
+                    } else {
+                        console.error("Could not find the team grid container to inject team members.");
+                    }
                 </script>
             </div>
         </section>
@@ -632,19 +654,25 @@
                     const initialTechnologies = [
                         "توزيع كهربي متقدم", "أنظمة تيار خفيف ذكية", "أتمتة وتحكم (PLC/SCADA)",
                         "ذكاء اصطناعي (AI/ML)", "إنترنت الأشياء (IoT)", "تحليل بيانات ضخمة", 
-                        "Supabase (قاعدة بيانات، مصادقة، تخزين)", 
-                        "Gemini API"
+                        "Supabase (قاعدة بيانات، مصادقة، تخزين)"
                     ];
                     let techHtml = '';
                     initialTechnologies.forEach((tech, index) => {
                         techHtml += `<span class="technology-badge" style="--animation-delay: ${index * 0.05}s; opacity:0; animation: slideInUp 0.5s ease-out forwards;">${tech}</span>`;
                     });
-                    document.currentScript.parentNode.innerHTML = techHtml;
+                     const techListElement = document.getElementById('technologiesList');
+                    if (techListElement) {
+                        techListElement.innerHTML = techHtml;
+                    } else if (document.currentScript) {
+                         document.currentScript.parentNode.innerHTML = techHtml;
+                    } else {
+                        console.error("Could not find the technologies list container.");
+                    }
                 </script>
             </div>
             <div class="mt-10 text-center">
-                <button onclick="suggestAdditionalTechnologies()" class="btn btn-ai-feature">
-                    <i class="fas fa-cogs mr-2"></i> ✨ اقتراح تقنيات إضافية
+                <button onclick="showStaticModal('اقتراح تقنيات', 'ميزة اقتراح التقنيات الإضافية غير متاحة حاليًا.')" class="btn btn-ai-feature">
+                    <i class="fas fa-cogs mr-2"></i> تقنيات إضافية (قريباً)
                 </button>
             </div>
         </section>
@@ -1494,6 +1522,10 @@
                         const commentsListEl = eventElement.querySelector(`.event-comments-list-${event.id}`);
                         const commentCountEl = eventElement.querySelector(`.comment-count-${event.id}`);
                         const noCommentsEl = commentsListEl ? commentsListEl.querySelector(`.no-comments-yet-${event.id}`) : null; 
+
+                        console.log(`For event ${event.id}: commentsListEl found?`, !!commentsListEl);
+                        console.log(`For event ${event.id}: commentCountEl found?`, !!commentCountEl);
+                        console.log(`For event ${event.id}: noCommentsEl (queried from commentsListEl) found?`, !!noCommentsEl);
                         
                         loadCommentsForEvent(event.id, commentsListEl, commentCountEl, noCommentsEl);
                         loadReactionsForEvent(event.id, eventElement);
@@ -2061,61 +2093,27 @@
         window.handleReaction = handleReaction;
 
 
-        // --- دوال Gemini API (تبقى كما هي) ---
-        // const generalInfoModal, generalInfoModalTitle, generalInfoModalText, generalInfoModalLoading are defined above
-        // const projectDescriptionTextElement, projectDescriptionText, technologiesListElement are defined above
-
-        window.showModalForApi = function(title) { 
+        // --- دوال Gemini API (تم تعطيلها أو إزالتها) ---
+        window.showModalForApi = function(title, fallbackText = "هذه الميزة تستخدم API خارجي وهي غير متاحة حاليًا.") { 
             if (!generalInfoModal || !generalInfoModalTitle || !generalInfoModalText || !generalInfoModalLoading) { console.error("Modal elements not found for showModalForApi"); return;}
             generalInfoModalTitle.textContent = title; 
-            generalInfoModalText.style.display = "none"; 
-            generalInfoModalText.innerHTML = "";
-            generalInfoModalLoading.style.display = "block"; 
+            generalInfoModalText.innerHTML = fallbackText.replace(/\n/g, '<br>');
+            generalInfoModalLoading.style.display = "none"; 
+            generalInfoModalText.style.display = "block"; 
             generalInfoModal.style.display = "block";
          };
         
-        const geminiApiKeyFromEnv = (typeof __gemini_api_key__ !== 'undefined' && __gemini_api_key__) ? __gemini_api_key__ : "";
-        const geminiApiKey = geminiApiKeyFromEnv || "YOUR_GEMINI_API_KEY_IF_NOT_FROM_ENV"; // استبدل هذا بمفتاحك إذا لم يتم توفيره
-        const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
-        
-        async function callGeminiAPI(prompt) { 
-            if (!geminiApiKey || geminiApiKey === "YOUR_GEMINI_API_KEY_IF_NOT_FROM_ENV" || geminiApiKey.length < 20) { 
-                console.error("Gemini API Key is missing or invalid.");
-                return "خطأ: مفتاح Gemini API غير موجود أو غير صالح. يرجى التحقق من إعدادات المفتاح.";
-            }
-            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
-            try { const response = await fetch(geminiApiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                if (!response.ok) { 
-                    const errorData = await response.json().catch(() => ({ error: { message: response.statusText } })); 
-                    console.error("Gemini API Error:", errorData); 
-                    return `حدث خطأ أثناء الاتصال بـ Gemini API: ${errorData.error?.message || response.statusText}. تأكد من أن المفتاح صحيح وأن الخدمة مفعلة.`; 
-                }
-                const result = await response.json();
-                if (result.candidates && result.candidates[0]?.content?.parts?.[0]?.text) { return result.candidates[0].content.parts[0].text; }
-                else { console.error("Gemini API Response structure unexpected:", result); return "لم يتمكن Gemini من إنشاء رد."; }
-            } catch (error) { console.error("Fetch error for Gemini API:", error); return "حدث خطأ في الشبكة أو في طلب Gemini API."; }
-         }
         window.generateAIIdeas = async function() { 
-            const prompt = `بالنظر لوصف المشروع: "${projectDescriptionText}". اقترح 3-4 أفكار إبداعية لتطبيق الذكاء الاصطناعي لتحسين التوزيع الكهربي أو إضافة ميزات مبتكرة. قدمها كقائمة مرقمة مع شرح موجز بالعربية.`;
-            window.showModalForApi("✨ أفكار AI للمشروع"); const ideas = await callGeminiAPI(prompt);
-            if(generalInfoModalText) generalInfoModalText.innerHTML = ideas.replace(/\n/g, '<br>'); if(generalInfoModalLoading) generalInfoModalLoading.style.display = "none"; if(generalInfoModalText) generalInfoModalText.style.display = "block";
+            window.showModalForApi("✨ أفكار للمشروع", "ميزة اقتراح الأفكار باستخدام الذكاء الاصطناعي غير متاحة حاليًا. يمكنك تصفح الأفكار الموجودة أو إضافة فكرتك الخاصة!");
          };
         window.generateDetailedProjectDescription = async function() { 
-            const prompt = `مشروعنا "التوزيع الكهربي الذكي: دمج التيار الخفيف، الأتمتة، والذكاء الاصطناعي". الوصف الحالي: "${projectDescriptionText}". أنشئ وصفًا تقنيًا مفصلاً (150-200 كلمة) بالعربية، يركز على الجوانب التقنية، المنهجيات، وابتكارات دمج AI، الأتمتة، والتيار الخفيف.`;
-            window.showModalForApi("✨ وصف تقني مفصل للمشروع"); const description = await callGeminiAPI(prompt);
-            if(generalInfoModalText) generalInfoModalText.innerHTML = description.replace(/\n/g, '<br>'); if(generalInfoModalLoading) generalInfoModalLoading.style.display = "none"; if(generalInfoModalText) generalInfoModalText.style.display = "block";
+            window.showModalForApi("✨ وصف تقني مفصل للمشروع", "ميزة إنشاء وصف تقني مفصل باستخدام الذكاء الاصطناعي غير متاحة حاليًا. يرجى مراجعة قسم 'نبذة عن المشروع'.");
          };
         window.suggestAdditionalTechnologies = async function() { 
-            let currentTechs = []; if (technologiesListElement) { const techBadges = technologiesListElement.querySelectorAll('.technology-badge'); techBadges.forEach(badge => currentTechs.push(badge.textContent.trim()));}
-            const currentTechsString = currentTechs.join(', ') || "لا يوجد حاليا";
-            const prompt = `مشروعنا يركز على "التوزيع الكهربي الذكي، التيار الخفيف، الأتمتة، والذكاء الاصطناعي". التقنيات الحالية: ${currentTechsString}. اقترح 2-3 تقنيات أو أدوات (برمجية/عتادية) إضافية متطورة ومحددة تكون مفيدة للمشروع، مع مبرر موجز لكل اقتراح بالعربية.`;
-            window.showModalForApi("✨ اقتراح تقنيات إضافية"); const suggestions = await callGeminiAPI(prompt);
-            if(generalInfoModalText) generalInfoModalText.innerHTML = suggestions.replace(/\n/g, '<br>'); if(generalInfoModalLoading) generalInfoModalLoading.style.display = "none"; if(generalInfoModalText) generalInfoModalText.style.display = "block";
+            window.showModalForApi("✨ اقتراح تقنيات إضافية", "ميزة اقتراح تقنيات إضافية باستخدام الذكاء الاصطناعي غير متاحة حاليًا.");
          };
         window.suggestTasksForVacantRole = async function(roleName) { 
-            const prompt = `لفريق مشروع تخرج يعمل على "التوزيع الكهربي الذكي بدمج التيار الخفيف، الأتمتة، والذكاء الاصطناعي"، لدينا ${roleName} شاغر. اقترح 3-4 مهام ومسؤوليات محددة وعملية لعضو جديد في هذا الدور، تساهم في تقدم المشروع. قدمها كقائمة مرقمة بالعربية.`;
-            window.showModalForApi(`✨ مهام مقترحة لـ ${roleName}`); const tasks = await callGeminiAPI(prompt);
-            if(generalInfoModalText) generalInfoModalText.innerHTML = tasks.replace(/\n/g, '<br>'); if(generalInfoModalLoading) generalInfoModalLoading.style.display = "none"; if(generalInfoModalText) generalInfoModalText.style.display = "block";
+            window.showModalForApi(`✨ مهام مقترحة لـ ${roleName}`, `ميزة اقتراح المهام باستخدام الذكاء الاصطناعي غير متاحة حاليًا لدور "${roleName}".`);
          };
         
         // استدعاء عند تحميل الصفحة
