@@ -838,18 +838,26 @@
                     options: { 
                         data: { 
                             full_name: fullName, 
-                            user_name: fullName, 
+                            user_name: fullName, // Using full_name as user_name initially
                             academic_id: academicId || null, 
                             role: assignedRole 
-                        }
+                        },
+                        // ***** THIS IS THE ADJUSTMENT *****
+                        emailRedirectTo: 'https://minalop.github.io/Flash-Team-Confirmation/' 
+                        // This URL should be in your Supabase project's "Redirect URLs" allowlist
+                        // It's where the user will be sent AFTER clicking the confirmation link in their email.
                     }
                 });
 
                 if (authError) throw authError;
 
-                if (authData.user) {
+                // Note: authData.user will be null here if "Confirm email" is enabled in Supabase,
+                // as the user is not fully authenticated until they confirm their email.
+                // The session might be populated if email confirmation is off.
+                if (authData.user || authData.session === null) { // Check if user object exists or if session is null (meaning email sent for confirmation)
                     showModalMessage('تم إنشاء حساب المصادقة بنجاح! يرجى التحقق من بريدك الإلكتروني لتفعيل الحساب.');
                 } else {
+                     // This case might not be hit often if Supabase always returns a user object or null session on success.
                     showModalMessage('حدث خطأ غير متوقع أثناء إنشاء الحساب. الرجاء المحاولة مرة أخرى.', true);
                 }
             } catch (authError) {
@@ -868,21 +876,16 @@
         
         navLogoutBtn.addEventListener('click', async () => {
             console.log("Logout button clicked. Current user before signout:", currentUser);
-            if (!currentUser) {
+            if (!currentUser) { 
                 showModalMessage('أنت غير مسجل الدخول حاليًا.', true);
-                // No need to call updateAuthState or navigateTo here explicitly,
-                // onAuthStateChange will handle the state if it's inconsistent
-                // or if the UI needs to reflect a "not logged in" state.
+                await updateAuthState(null); 
+                navigateTo('home');       
                 return;
             }
             try {
                 const { error } = await _supabase.auth.signOut();
-                if (error) {
-                    throw error;
-                }
+                if (error) throw error;
                 showModalMessage('تم تسجيل الخروج بنجاح.');
-                // onAuthStateChange will be triggered with (event: 'SIGNED_OUT', session: null)
-                // and will then call updateAuthState(null) and navigateTo('home').
             } catch (error) {
                 showModalMessage(`خطأ في تسجيل الخروج: ${error.message}`, true);
                 console.error("Logout error:", error);
@@ -907,23 +910,13 @@
 
         async function updateAuthState(user) {
             console.log("Updating auth state for user:", user); 
-            currentUser = user; // Ensure global currentUser is updated first
-
-            const authLinks = document.getElementById('auth-links');
-            const userInfoDisplay = document.getElementById('user-info');
-            const myProfileNavLink = document.getElementById('my-profile-nav-link');
-            const myProfileNavLinkMobile = document.getElementById('my-profile-nav-link-mobile');
-            const createEventBtnGeneral = document.getElementById('create-event-btn');
-            const userNameNav = document.getElementById('user-name-nav');
-            const userAvatarNav = document.getElementById('user-avatar-nav');
-            const commenterAvatar = document.getElementById('commenter-avatar');
-            const updateProfileFormContainer = document.getElementById('current-user-profile-form-container');
+            const updateProfileFormContainer = document.getElementById('current-user-profile-form-container'); 
 
             if (user) {
-                authLinks.classList.add('hidden-section');
+                authLinks.className = 'hidden-section items-center gap-2 sm:gap-4'; 
                 myProfileNavLink.classList.remove('hidden-section');
-                if (myProfileNavLinkMobile) myProfileNavLinkMobile.classList.remove('hidden-section');
-                userInfoDisplay.classList.remove('hidden-section');
+                if(myProfileNavLinkMobile) myProfileNavLinkMobile.classList.remove('hidden-section');
+                userInfoDisplay.className = 'flex items-center gap-2 sm:gap-3'; 
 
                 try {
                     const { data: profile, error: profileError } = await _supabase
@@ -943,7 +936,11 @@
                         userAvatarNav.src = profile.avatar_url || 'https://placehold.co/32x32/E0E0E0/B0B0B0?text=U';
                         commenterAvatar.src = profile.avatar_url || 'https://placehold.co/40x40/E0E0E0/B0B0B0?text=User';
                         if (createEventBtnGeneral) {
-                             createEventBtnGeneral.classList.toggle('hidden-section', profile.role !== 'admin');
+                            if (profile.role === 'admin') {
+                                createEventBtnGeneral.classList.remove('hidden-section');
+                            } else {
+                                createEventBtnGeneral.classList.add('hidden-section');
+                            }
                         }
                     } else {
                         console.warn("User authenticated but profile not found in DB for ID:", user.id);
@@ -967,10 +964,10 @@
                 }
 
             } else { 
-                authLinks.classList.remove('hidden-section');
+                authLinks.className = 'flex items-center gap-2 sm:gap-4'; 
                 myProfileNavLink.classList.add('hidden-section');
-                if (myProfileNavLinkMobile) myProfileNavLinkMobile.classList.add('hidden-section');
-                userInfoDisplay.classList.add('hidden-section');
+                if(myProfileNavLinkMobile) myProfileNavLinkMobile.classList.add('hidden-section');
+                userInfoDisplay.className = 'hidden-section items-center gap-2 sm:gap-3'; 
                 userNameNav.textContent = '';
                 userAvatarNav.src = 'https://placehold.co/32x32/E0E0E0/B0B0B0?text=U';
                 commenterAvatar.src = 'https://placehold.co/40x40/E0E0E0/B0B0B0?text=User';
@@ -981,36 +978,37 @@
         
         _supabase.auth.onAuthStateChange(async (event, session) => { 
             console.log("onAuthStateChange - Event:", event, "Session:", session); 
-            const previousUser = currentUser; 
-            const newUser = session?.user || null; 
+            const previousUser = currentUser; // Store previous user state for comparison
+            currentUser = session?.user || null; 
             
-            currentUser = newUser; 
-            
-            await updateAuthState(newUser); 
+            await updateAuthState(currentUser); // Update UI elements immediately
 
             if (!initialAuthProcessed) {
                 initialAuthProcessed = true;
+                // Use setTimeout to ensure DOM updates from updateAuthState are processed before navigation
                 setTimeout(() => { 
                     const hash = window.location.hash.substring(1);
                     let targetPage = 'home'; 
                     if (hash && document.getElementById(hash)) {
                         targetPage = hash;
-                    } else if (hash) { 
+                    } else if (hash) { // If hash exists but element doesn't, log warning
                         console.warn(`Hash target #${hash} not found, defaulting to home.`);
                     }
                     console.log("onAuthStateChange (Initial Navigation): Navigating to:", targetPage);
                     navigateTo(targetPage);
-                }, 0); 
-            } else if (event === 'SIGNED_IN' && !previousUser) { 
+                }, 0); // Small delay, can be 0
+            } else if (event === 'SIGNED_IN' && !previousUser) { // User just signed in
+                // Only navigate if currently on login/signup page
                 const currentSectionId = Array.from(contentSections).find(s => !s.classList.contains('hidden-section'))?.id;
                 if (currentSectionId === 'login' || currentSectionId === 'signup') {
                     console.log("onAuthStateChange (Post-Login Navigation): Navigating to home.");
                     navigateTo('home');
                 }
-            } else if (event === 'SIGNED_OUT') { 
+            } else if (event === 'SIGNED_OUT') { // User just signed out
                 console.log("onAuthStateChange (Post-Signout Navigation): Navigating to home.");
                 navigateTo('home');
             }
+            // For other events like USER_UPDATED or TOKEN_REFRESHED, updateAuthState is usually sufficient.
         });
 
         const teamMembersListContainer = document.getElementById('team-members-list'); 
@@ -1214,12 +1212,12 @@
             eventImagesPreviewContainer.innerHTML = ''; // Clear existing previews
 
             // Render previews for existing URLs (when editing)
-            if (Array.isArray(existingEventImageUrls)) { 
+            if (Array.isArray(existingEventImageUrls)) { // ADDED CHECK
                 existingEventImageUrls.forEach(url => {
                     const previewItem = createImagePreviewElement(url, url, false);
                     eventImagesPreviewContainer.appendChild(previewItem);
                 });
-            } else if (existingEventImageUrls) { 
+            } else if (existingEventImageUrls) { // If it's not null/undefined but also not an array (e.g. single string from old data)
                  console.warn("renderImagePreviews: existingEventImageUrls was not an array but had a value. Treating as single image URL for preview.", existingEventImageUrls);
                  const previewItem = createImagePreviewElement(existingEventImageUrls, existingEventImageUrls, false);
                  eventImagesPreviewContainer.appendChild(previewItem);
@@ -1956,7 +1954,7 @@
             if (!currentUser) { showModalMessage('يجب تسجيل الدخول لتعديل الفعالية.', true); navigateTo('login'); return; }
             editingEventId = eventId;
             eventImageFilesToUpload = []; 
-            // existingEventImageUrls = []; // This was the issue, should be correctly populated below
+            // existingEventImageUrls = []; // Keep this line, it will be repopulated
             selectedMainImagePreviewUrl = null;
 
             try {
@@ -1970,8 +1968,16 @@
                 document.getElementById('event-description').value = eventToEdit.description;
                 document.getElementById('event-date').value = eventToEdit.event_date;
                 
-                // Ensure existingEventImageUrls is an array, even if image_urls is null or not an array
-                existingEventImageUrls = Array.isArray(eventToEdit.image_urls) ? eventToEdit.image_urls : (eventToEdit.image_urls ? [eventToEdit.image_urls] : []);
+                // Ensure existingEventImageUrls is an array
+                if (Array.isArray(eventToEdit.image_urls)) {
+                    existingEventImageUrls = eventToEdit.image_urls;
+                } else if (eventToEdit.image_urls === null || typeof eventToEdit.image_urls === 'undefined') {
+                    existingEventImageUrls = [];
+                } else {
+                    // This case should ideally not happen if the DB schema is TEXT[]
+                    console.warn("handleEditEvent: eventToEdit.image_urls is not an array, null, or undefined. Value:", eventToEdit.image_urls, "Defaulting to empty array.");
+                    existingEventImageUrls = []; 
+                }
                 
                 selectedMainImagePreviewUrl = eventToEdit.main_image_url || (existingEventImageUrls.length > 0 ? existingEventImageUrls[0] : null);
                 
