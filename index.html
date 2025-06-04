@@ -700,7 +700,7 @@
         document.querySelectorAll('.form-button').forEach(el => el.className = `${formButtonStyles} ${el.className}`);
 
         // --- Supabase Query Timeout Wrapper ---
-        async function supabaseQueryWithTimeout(queryPromise, operationName = "Supabase query", timeoutMs = 12000) { // Default timeout 12s
+        async function supabaseQueryWithTimeout(queryPromise, operationName = "Supabase query", timeoutMs = 10) { // Default timeout 12s
             let timeoutHandle;
             let querySettled = false; // Flag to track if the original query settled
             console.log(`[TimeoutWrapper - ${operationName}] Setting up timeout for ${timeoutMs}ms.`);
