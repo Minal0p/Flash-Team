@@ -683,9 +683,9 @@
         let currentEventId = null;
         let currentUser = null;
         let initialAuthProcessed = false;
-        let initialNavigationPromise = null; // To track the first navigation attempt
+        let initialNavigationPromise = null; 
         let editingEventId = null;
-        let isNavigating = false; // Guard flag for navigation
+        let isNavigating = false; 
 
         // --- Variables for multiple image handling ---
         let eventImageFilesToUpload = [];
@@ -701,7 +701,7 @@
         document.querySelectorAll('.form-button').forEach(el => el.className = `${formButtonStyles} ${el.className}`);
 
         // --- Supabase Query Timeout Wrapper ---
-        async function supabaseQueryWithTimeout(queryPromise, operationName = "Supabase query", timeoutMs = 100) { // Default timeout 0.1s
+        async function supabaseQueryWithTimeout(queryPromise, operationName = "Supabase query", timeoutMs = 3000) { // Default timeout 3s
             let timeoutHandle;
             let querySettled = false; 
             console.log(`[TimeoutWrapper - ${operationName}] Setting up timeout for ${timeoutMs}ms.`);
