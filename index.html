@@ -700,23 +700,45 @@
         document.querySelectorAll('.form-button').forEach(el => el.className = `${formButtonStyles} ${el.className}`);
 
         // --- Supabase Query Timeout Wrapper ---
-        async function supabaseQueryWithTimeout(queryPromise, operationName = "Supabase query", timeoutMs = 15000) {
+        async function supabaseQueryWithTimeout(queryPromise, operationName = "Supabase query", timeoutMs = 10000) { // Default timeout 10s
             let timeoutHandle;
+            console.log(`[TimeoutWrapper - ${operationName}] Setting up timeout for ${timeoutMs}ms.`);
+
             const timeoutPromise = new Promise((_, reject) => {
                 timeoutHandle = setTimeout(() => {
-                    console.warn(`${operationName} timed out after ${timeoutMs}ms`);
+                    console.warn(`[TimeoutWrapper - ${operationName}] TIMEOUT PROMISE REJECTING after ${timeoutMs}ms.`);
                     reject(new Error(`${operationName} timed out after ${timeoutMs}ms`));
                 }, timeoutMs);
             });
+            
+            // Wrap the original query to log its settlement and clear timeout
+            const wrappedQueryPromise = queryPromise
+                .then(value => {
+                    console.log(`[TimeoutWrapper - ${operationName}] Original queryPromise RESOLVED.`);
+                    clearTimeout(timeoutHandle); // Query won, clear timeout
+                    return value; // This will be { data, error } from Supabase if successful
+                })
+                .catch(err => {
+                    console.error(`[TimeoutWrapper - ${operationName}] Original queryPromise REJECTED.`, err);
+                    clearTimeout(timeoutHandle); // Query won (by rejecting), clear timeout
+                    throw err; // Re-throw the original error to be caught by Promise.race's catch
+                });
 
             try {
-                console.log(`Executing ${operationName} with ${timeoutMs}ms timeout.`);
-                const result = await Promise.race([queryPromise, timeoutPromise]);
-                // If queryPromise resolves or rejects before timeout, Promise.race will settle with that outcome.
-                // If timeout hits first, timeoutPromise rejects.
+                console.log(`[TimeoutWrapper - ${operationName}] Awaiting Promise.race.`);
+                const result = await Promise.race([wrappedQueryPromise, timeoutPromise]);
+                // If wrappedQueryPromise resolved, it's the result.
+                console.log(`[TimeoutWrapper - ${operationName}] Promise.race won by original query. Result:`, result ? 'has data/error' : 'no data/error (unexpected)');
+                // No need to clear timeout here again if wrappedQueryPromise handles it, but doesn't hurt.
+                clearTimeout(timeoutHandle); 
                 return result; 
-            } finally {
-                clearTimeout(timeoutHandle); // Always clear the timeout
+            } catch (error) {
+                // This catch block will execute if:
+                // 1. timeoutPromise rejected (timeout occurred).
+                // 2. wrappedQueryPromise (and thus original queryPromise) rejected.
+                console.error(`[TimeoutWrapper - ${operationName}] Error from Promise.race (either from query or timeout):`, error);
+                clearTimeout(timeoutHandle); // Ensure timeout is cleared.
+                return { data: null, error: error }; // Return a Supabase-like error object.
             }
         }
 
@@ -795,7 +817,7 @@
                     if (homeSection) homeSection.classList.remove('hidden-section');
                 }
             } catch (loadError) {
-                console.error(`[Nav ${navAttemptId}] Error during content loading for ${targetId}:`, loadError);
+                console.error(`[Nav ${navAttemptId}] Error during content loading for ${targetId}:`, loadError.message, loadError);
                 showModalMessage(`فشل تحميل محتوى قسم ${targetId}. الخطأ: ${loadError.message}`, true);
                 const homeSection = document.getElementById('home');
                 if (homeSection) {
@@ -1684,42 +1706,53 @@
             }
             upcomingEventsList.innerHTML = '<div class="text-center p-4 text-gray-500 col-span-full">جاري تحميل الفعاليات القادمة...</div>';
             pastEventsList.innerHTML = '<div class="text-center p-4 text-gray-500 col-span-full">جاري تحميل الفعاليات السابقة...</div>';
+            
+            let eventsData, eventsError;
             try {
                 const eventsQuery = _supabase.from('project_events').select('*').order('event_date', { ascending: false });
-                const { data: events, error } = await supabaseQueryWithTimeout(eventsQuery, "LoadEvents");
+                // Directly use the destructured result from the timeout wrapper
+                const result = await supabaseQueryWithTimeout(eventsQuery, "LoadEvents");
+                eventsData = result.data;
+                eventsError = result.error;
 
-                if (error) {
-                    console.error('Error fetching events (Supabase call or timeout in loadEvents):', error);
+                if (eventsError) {
+                    console.error('Error fetching events (Supabase call or timeout in loadEvents):', eventsError);
                     upcomingEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات القادمة.</p>';
                     pastEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات السابقة.</p>';
-                    showModalMessage(`فشل تحميل الفعاليات: ${error.message}`, true);
-                    throw error; 
+                    showModalMessage(`فشل تحميل الفعاليات: ${eventsError.message}`, true);
+                    throw eventsError; // Propagate error
                 }
                 
+                // Ensure eventsData is an array before filtering
+                if (!Array.isArray(eventsData)) {
+                    console.error('LoadEvents: eventsData is not an array after fetch:', eventsData);
+                    throw new Error('Invalid data format for events.');
+                }
+
                 const today = new Date().toISOString().split('T')[0];
-                const upcoming = events.filter(e => e.event_date >= today);
-                const past = events.filter(e => e.event_date < today);
+                const upcoming = eventsData.filter(e => e.event_date >= today);
+                const past = eventsData.filter(e => e.event_date < today);
                 upcomingEventsList.innerHTML = upcoming.length ? upcoming.map(e => createEventCard(e, true)).join('') : '<p class="text-gray-600 p-4 text-center col-span-full">لا توجد فعاليات قادمة حالياً.</p>';
                 pastEventsList.innerHTML = past.length ? past.map(e => createEventCard(e, false)).join('') : '<p class="text-gray-600 p-4 text-center col-span-full">لا توجد فعاليات سابقة.</p>';
                 
-                try { 
-                    attachDynamicEventListeners();
-                } catch (listenerError) {
-                    console.error("Error in attachDynamicEventListeners within loadEvents:", listenerError);
-                }
+                console.log("loadEvents: DOM updated, now attaching listeners.");
+                attachDynamicEventListeners(); // This must not throw unhandled errors
+                console.log("loadEvents: Listeners attached.");
 
             } catch (e) { 
-                console.error('Overall error caught in loadEvents, re-throwing:', e);
-                if (!e.message.includes("فشل تحميل الفعاليات")) {
-                     showModalMessage(`خطأ في تحميل الفعاليات: ${e.message}`, true);
-                }
+                console.error('Overall error caught in loadEvents. Error:', e);
+                // Ensure UI reflects error state if not already set
                 if (upcomingEventsList && !upcomingEventsList.innerHTML.includes('text-red-500')) {
                     upcomingEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات القادمة.</p>';
                 }
                 if (pastEventsList && !pastEventsList.innerHTML.includes('text-red-500')) {
                     pastEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات السابقة.</p>';
                 }
-                throw e; 
+                // Ensure a modal message is shown if not a specific Supabase error message already displayed
+                if (!e.message.includes("فشل تحميل الفعاليات") && !e.message.includes("timed out")) {
+                     showModalMessage(`خطأ في تحميل الفعاليات: ${e.message}`, true);
+                }
+                throw e; // Re-throw so navigateTo's catch block can handle it and reset isNavigating
             }
         }
 
@@ -1729,9 +1762,6 @@
                 if(eventDetailsContent) eventDetailsContent.innerHTML = '<p class="text-red-500 p-4 text-center">خطأ في عرض تفاصيل الفعالية (عناصر مفقودة).</p>';
                 throw new Error("Event details display elements not found.");
             }
-            // The eventData is passed in, so no primary Supabase fetch here unless more data is needed.
-            // If eventData itself needs to be re-fetched, that would need the timeout wrapper.
-            // For now, assuming eventData is complete enough from the list click.
 
             eventDetailsContent.innerHTML = '';
             eventDetailsMainImage.src = 'https://placehold.co/800x400/cccccc/969696?text=Loading...';
@@ -1816,7 +1846,7 @@
                 await fetchEventCounts(eventData.id, true);
                 await checkUserReaction(eventData.id, true);
                 attachDynamicEventListenersForDetails(detailsTextContainer);
-                await loadEventComments(eventData.id); // This makes a Supabase call
+                await loadEventComments(eventData.id); 
             } catch (error) { 
                 console.error('Overall error in loadEventDetails, re-throwing:', error);
                 detailsTextContainer.innerHTML = '<p class="text-red-500 p-4 text-center">فشل تحميل تفاصيل الفعالية.</p>';
@@ -1860,7 +1890,6 @@
                                     .select('avatar_url, full_name')
                                     .eq('id', comment.user_id)
                                     .single();
-                                // Using timeout for these inner fetches too, though a shorter one might be appropriate
                                 const { data: profileData, error: profileError } = await supabaseQueryWithTimeout(profileQuery, `FetchCommenterProfile-${comment.user_id}`, 5000); 
                                 
                                 if (profileError) {
