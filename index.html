@@ -699,6 +699,27 @@
         document.querySelectorAll('.input-field').forEach(el => el.className = inputFieldStyles);
         document.querySelectorAll('.form-button').forEach(el => el.className = `${formButtonStyles} ${el.className}`);
 
+        // --- Supabase Query Timeout Wrapper ---
+        async function supabaseQueryWithTimeout(queryPromise, operationName = "Supabase query", timeoutMs = 15000) {
+            let timeoutHandle;
+            const timeoutPromise = new Promise((_, reject) => {
+                timeoutHandle = setTimeout(() => {
+                    console.warn(`${operationName} timed out after ${timeoutMs}ms`);
+                    reject(new Error(`${operationName} timed out after ${timeoutMs}ms`));
+                }, timeoutMs);
+            });
+
+            try {
+                console.log(`Executing ${operationName} with ${timeoutMs}ms timeout.`);
+                const result = await Promise.race([queryPromise, timeoutPromise]);
+                // If queryPromise resolves or rejects before timeout, Promise.race will settle with that outcome.
+                // If timeout hits first, timeoutPromise rejects.
+                return result; 
+            } finally {
+                clearTimeout(timeoutHandle); // Always clear the timeout
+            }
+        }
+
 
         // --- Navigation ---
         async function navigateTo(targetId, eventData = null) {
@@ -775,7 +796,7 @@
                 }
             } catch (loadError) {
                 console.error(`[Nav ${navAttemptId}] Error during content loading for ${targetId}:`, loadError);
-                showModalMessage(`فشل تحميل محتوى قسم ${targetId}.`, true);
+                showModalMessage(`فشل تحميل محتوى قسم ${targetId}. الخطأ: ${loadError.message}`, true);
                 const homeSection = document.getElementById('home');
                 if (homeSection) {
                      contentSections.forEach(s => s.classList.add('hidden-section'));
@@ -936,11 +957,14 @@
                 userInfoDisplay.className = 'flex items-center gap-2 sm:gap-3';
 
                 try {
-                    const { data: profile, error: profileError } = await _supabase
+                    const profileQuery = _supabase
                         .from('profiles')
                         .select('full_name, avatar_url, role')
                         .eq('id', user.id)
                         .single();
+                    
+                    const { data: profile, error: profileError } = await supabaseQueryWithTimeout(profileQuery, "UpdateAuthState Profile Fetch");
+
 
                     if (profileError) {
                         console.error("Error fetching profile for UI update (updateAuthState):", profileError);
@@ -966,9 +990,9 @@
                         commenterAvatar.src = 'https://placehold.co/40x40/E0E0E0/B0B0B0?text=User';
                         if (createEventBtnGeneral) createEventBtnGeneral.classList.add('hidden-section');
                     }
-                } catch (e) {
-                    console.error("Unexpected error in updateAuthState profile section:", e);
-                    userNameNav.textContent = user.email;
+                } catch (e) { // Catches errors from supabaseQueryWithTimeout if it rejects
+                    console.error("Unexpected error in updateAuthState profile section (after timeout wrapper):", e);
+                    userNameNav.textContent = user.email; // Fallback UI
                     userAvatarNav.src = 'https://placehold.co/32x32/E0E0E0/B0B0B0?text=U';
                     commenterAvatar.src = 'https://placehold.co/40x40/E0E0E0/B0B0B0?text=User';
                     if (createEventBtnGeneral) createEventBtnGeneral.classList.add('hidden-section');
@@ -1071,27 +1095,30 @@
                 console.error('No user logged in, cannot load profile data for editing.');
                 const profileFormContainer = document.getElementById('current-user-profile-form-container');
                 if (profileFormContainer) profileFormContainer.classList.add('hidden-section');
-                throw new Error("User not logged in, cannot load profile data."); // Throw to indicate failure
+                throw new Error("User not logged in, cannot load profile data.");
             }
             const profileFormContainer = document.getElementById('current-user-profile-form-container');
             if (profileFormContainer) profileFormContainer.classList.remove('hidden-section');
 
             try {
                 console.log("loadCurrentUserProfileData: Fetching profile for user ID:", currentUser.id);
-                const { data: profile, error } = await _supabase
+                const profileQuery = _supabase
                     .from('profiles')
                     .select('full_name, User_Name, academic_id, role, avatar_url')
                     .eq('id', currentUser.id)
                     .single();
+                
+                const { data: profile, error } = await supabaseQueryWithTimeout(profileQuery, "LoadCurrentUserProfileData");
+
 
                 if (error) {
-                    console.error('Error fetching current user profile (Supabase call in loadCurrentUserProfileData):', error);
+                    console.error('Error fetching current user profile (Supabase call or timeout in loadCurrentUserProfileData):', error);
                     showModalMessage(`فشل تحميل بيانات الملف الشخصي: ${error.message}`, true);
                     if (updateProfileForm) updateProfileForm.reset();
                     if(updateAvatarPreview) updateAvatarPreview.src = 'https://placehold.co/100x100/E0E0E0/B0B0B0?text=Avatar';
                     const roleDisplay = document.getElementById('update-profile-role-display');
                     if (roleDisplay) roleDisplay.textContent = 'غير محدد';
-                    throw error; // Propagate Supabase error
+                    throw error; 
                 }
 
                 if (profile) {
@@ -1108,15 +1135,14 @@
                     if(updateAvatarPreview) updateAvatarPreview.src = 'https://placehold.co/100x100/E0E0E0/B0B0B0?text=Avatar';
                     const roleDisplay = document.getElementById('update-profile-role-display');
                     if (roleDisplay) roleDisplay.textContent = 'غير محدد';
-                    throw new Error("Profile data not found for current user."); // Indicate logical failure
+                    throw new Error("Profile data not found for current user.");
                 }
             } catch (e) { 
                 console.error('Overall error caught in loadCurrentUserProfileData, re-throwing:', e);
-                // Ensure modal is shown if not already by a specific Supabase error/logic path
                 if (!(e.message.includes("فشل تحميل بيانات الملف الشخصي")) && !(e.message.includes("لم يتم العثور على بيانات الملف الشخصي"))) {
                     showModalMessage(`خطأ في تحميل الملف الشخصي: ${e.message}`, true);
                 }
-                throw e; // Re-throw so navigateTo's catch block can handle it
+                throw e; 
             }
         }
 
@@ -1198,51 +1224,60 @@
         async function loadProfiles() {
             if (!teamMembersListContainer) {
                 console.error("Profile container 'team-members-list' not found.");
-                return; // Or throw new Error("Profile container missing");
+                throw new Error("Profile container 'team-members-list' not found.");
             }
             teamMembersListContainer.innerHTML = '<div class="text-center p-4 text-gray-500 col-span-full">جاري تحميل ملفات الفريق...</div>';
 
-            const teamMembersData = [
-                { name: "مينا حنا فهيم", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Mina%20Hanna.png", imgInitial: "م.ح", linkedinUrl: "https://www.linkedin.com/in/engminahanna", facebookUrl: "https://www.facebook.com/Eng.Mina.H.F", phone: "+201203006152" },
-                { name: "مينا فليب لبيب", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Mena%20Philip.jpg", imgInitial: "م.ف", linkedinUrl: "https://www.linkedin.com/in/mena-philip-766454340", facebookUrl: "https://www.facebook.com/profile.php?id=100004623032980", phone: "+201228226064" },
-                { name: "عمر عبد الهادي رمادي", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Omar%20Ramady.png", imgInitial: "ع.ع", linkedinUrl: "https://www.linkedin.com/in/omar-al-ramady-3a2022206", facebookUrl: "https://www.facebook.com/omar.al.ramady.2025", phone: "+201118525778" },
-                { name: "محمد سيد محمد حسان", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Bakar.jpg", imgInitial: "م.س", linkedinUrl: "https://www.linkedin.com/in/mohammed-sayed-mohammed-1892382b8", facebookUrl: "https://www.facebook.com/share/15aNJqX3NS/", phone: "+201152216149" },
-                { name: "محمد محمود بربري", role: "مهندس كهرباء", imgUrl: "https://scontent.fcai2-2.fna.fbcdn.net/v/t39.30808-6/470165541_4094575017436722_4593658555281273385_n.jpg?_nc_cat=100&ccb=1-7&_nc_sid=a5f93a&_nc_ohc=VJQgz6RpGeoQ7kNvwEx496C&_nc_oc=AdkF6Cy3nZgJQO6yCEtJBEwsgi5tgoopzrxjgBcugYfq5bwJoggbEp7WGh3mw_eF5QU&_nc_zt=23&_nc_ht=scontent.fcai2-2.fna&_nc_gid=u0NjoM5BSF6XuW5o5ZfQYA&oh=00_AfJlJ55AuNqroATBFoS7HT6x3TpFkV8VR4WXUaBlpz7DTQ&oe=683BE7E3", imgInitial: "م.م" },
-                { name: "احمد طارق احمد محمد", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Ahmed%20Tarek.jpg", imgInitial: "أ.ط", linkedinUrl: "https://www.linkedin.com/in/ahmed-tarek-a6b9061b6", facebookUrl: "https://www.facebook.com/share/1EGXAoeUcn/", phone: "+201023237803" },
-                { name: "شروق محمد فتحي", role: "مهندس كهرباء", imgInitial: "ش.م" },
-                { name: "فرحه محمد صلاح", role: "مهندس كهرباء", imgInitial: "ف.م" },
-                { name: "حسن السيد فواز", role: "مهندس كهرباء", imgInitial: "ح.ا" },
-                { name: "احمد اشرف سليمان", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Ahmed%20Ashraf.jpg", imgInitial: "أ.أ", linkedinUrl: "https://www.linkedin.com/in/ahmed-ashraf-soliman-772038267", facebookUrl: "https://www.facebook.com/share/19boqUX4LV/", phone: "+201204800317" },
-                { name: "كريم احمد نور الدين", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Karim%20Ahmed.jpg", imgInitial: "ك.أ", linkedinUrl: "https://www.linkedin.com/in/karim-ahmed-b68877251", facebookUrl: "https://www.facebook.com/share/1Mu5LQo5sK/?mibextid=wwXIfr", phone: "+201006036359" },
-                { name: "محمد يوسف عمار", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Mohamed%20Yousef.jpg", imgInitial: "م.ي", linkedinUrl: "https://www.linkedin.com/in/mohamed-yousef-bab471352", facebookUrl: "https://www.facebook.com/share/19JDJBVuch/", phone: "+201063815096" }
-            ];
-            const vacantSpots = 3;
-            let memberHtml = '';
+            // This function currently uses static data. If it were to fetch from Supabase,
+            // it would also need the supabaseQueryWithTimeout wrapper.
+            // For now, it's synchronous after the initial setup.
+            try {
+                const teamMembersData = [
+                    { name: "مينا حنا فهيم", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Mina%20Hanna.png", imgInitial: "م.ح", linkedinUrl: "https://www.linkedin.com/in/engminahanna", facebookUrl: "https://www.facebook.com/Eng.Mina.H.F", phone: "+201203006152" },
+                    { name: "مينا فليب لبيب", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Mena%20Philip.jpg", imgInitial: "م.ف", linkedinUrl: "https://www.linkedin.com/in/mena-philip-766454340", facebookUrl: "https://www.facebook.com/profile.php?id=100004623032980", phone: "+201228226064" },
+                    { name: "عمر عبد الهادي رمادي", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Omar%20Ramady.png", imgInitial: "ع.ع", linkedinUrl: "https://www.linkedin.com/in/omar-al-ramady-3a2022206", facebookUrl: "https://www.facebook.com/omar.al.ramady.2025", phone: "+201118525778" },
+                    { name: "محمد سيد محمد حسان", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Bakar.jpg", imgInitial: "م.س", linkedinUrl: "https://www.linkedin.com/in/mohammed-sayed-mohammed-1892382b8", facebookUrl: "https://www.facebook.com/share/15aNJqX3NS/", phone: "+201152216149" },
+                    { name: "محمد محمود بربري", role: "مهندس كهرباء", imgUrl: "https://scontent.fcai2-2.fna.fbcdn.net/v/t39.30808-6/470165541_4094575017436722_4593658555281273385_n.jpg?_nc_cat=100&ccb=1-7&_nc_sid=a5f93a&_nc_ohc=VJQgz6RpGeoQ7kNvwEx496C&_nc_oc=AdkF6Cy3nZgJQO6yCEtJBEwsgi5tgoopzrxjgBcugYfq5bwJoggbEp7WGh3mw_eF5QU&_nc_zt=23&_nc_ht=scontent.fcai2-2.fna&_nc_gid=u0NjoM5BSF6XuW5o5ZfQYA&oh=00_AfJlJ55AuNqroATBFoS7HT6x3TpFkV8VR4WXUaBlpz7DTQ&oe=683BE7E3", imgInitial: "م.م" },
+                    { name: "احمد طارق احمد محمد", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Ahmed%20Tarek.jpg", imgInitial: "أ.ط", linkedinUrl: "https://www.linkedin.com/in/ahmed-tarek-a6b9061b6", facebookUrl: "https://www.facebook.com/share/1EGXAoeUcn/", phone: "+201023237803" },
+                    { name: "شروق محمد فتحي", role: "مهندس كهرباء", imgInitial: "ش.م" },
+                    { name: "فرحه محمد صلاح", role: "مهندس كهرباء", imgInitial: "ف.م" },
+                    { name: "حسن السيد فواز", role: "مهندس كهرباء", imgInitial: "ح.ا" },
+                    { name: "احمد اشرف سليمان", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Ahmed%20Ashraf.jpg", imgInitial: "أ.أ", linkedinUrl: "https://www.linkedin.com/in/ahmed-ashraf-soliman-772038267", facebookUrl: "https://www.facebook.com/share/19boqUX4LV/", phone: "+201204800317" },
+                    { name: "كريم احمد نور الدين", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Karim%20Ahmed.jpg", imgInitial: "ك.أ", linkedinUrl: "https://www.linkedin.com/in/karim-ahmed-b68877251", facebookUrl: "https://www.facebook.com/share/1Mu5LQo5sK/?mibextid=wwXIfr", phone: "+201006036359" },
+                    { name: "محمد يوسف عمار", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Mohamed%20Yousef.jpg", imgInitial: "م.ي", linkedinUrl: "https://www.linkedin.com/in/mohamed-yousef-bab471352", facebookUrl: "https://www.facebook.com/share/19JDJBVuch/", phone: "+201063815096" }
+                ];
+                const vacantSpots = 3;
+                let memberHtml = '';
 
-            teamMembersData.forEach((member, index) => {
-                 const profileData = {
-                    name: member.name, role: member.role, imgUrl: member.imgUrl, imgInitial: member.imgInitial,
-                    linkedinUrl: member.linkedinUrl, facebookUrl: member.facebookUrl, phone: member.phone,
-                    animationDelay: `${index * 0.05}s`,
-                    academic_id: 'N/A', User_Name: member.name ? member.name.toLowerCase().replace(/\s+/g, '_') : `user_${index}`
-                };
-                memberHtml += createProfileCard(profileData);
-            });
+                teamMembersData.forEach((member, index) => {
+                    const profileData = {
+                        name: member.name, role: member.role, imgUrl: member.imgUrl, imgInitial: member.imgInitial,
+                        linkedinUrl: member.linkedinUrl, facebookUrl: member.facebookUrl, phone: member.phone,
+                        animationDelay: `${index * 0.05}s`,
+                        academic_id: 'N/A', User_Name: member.name ? member.name.toLowerCase().replace(/\s+/g, '_') : `user_${index}`
+                    };
+                    memberHtml += createProfileCard(profileData);
+                });
 
-            for (let i = 0; i < vacantSpots; i++) {
-                memberHtml += `
-                <div class="team-member-card p-2 sm:p-3 rounded-lg text-center bg-gray-700 bg-opacity-20 border-gray-600" style="--animation-delay: ${(teamMembersData.length + i) * 0.05}s;">
-                    <div>
-                        <img src="https://placehold.co/70x70/333333/888888?text=؟${i+1}&font=cairo" alt="مكان شاغر ${i+1}" class="w-14 h-14 sm:w-16 sm:h-16 rounded-full mx-auto mb-1 border-2 border-gray-500 shadow-md">
-                        <h3 class="text-xs font-bold text-gray-300 mb-0.5 leading-tight">مكان شاغر ${i+1}</h3>
-                        <p class="text-gray-400 mb-1 text-xxs" style="font-size: 0.6rem;">انضم إلينا!</p>
-                    </div>
-                    <button onclick="showModalMessage('اقتراح مهام', 'ميزة اقتراح المهام غير متاحة حاليًا.')" class="btn btn-secondary text-xxs py-1 px-2 w-full mt-auto bg-gray-500 hover:bg-gray-600 text-white rounded" style="font-size: 0.55rem; padding: 0.2rem 0.4rem;">
-                        <i class="fas fa-info-circle mr-1"></i> تفاصيل
-                    </button>
-                </div>`;
+                for (let i = 0; i < vacantSpots; i++) {
+                    memberHtml += `
+                    <div class="team-member-card p-2 sm:p-3 rounded-lg text-center bg-gray-700 bg-opacity-20 border-gray-600" style="--animation-delay: ${(teamMembersData.length + i) * 0.05}s;">
+                        <div>
+                            <img src="https://placehold.co/70x70/333333/888888?text=؟${i+1}&font=cairo" alt="مكان شاغر ${i+1}" class="w-14 h-14 sm:w-16 sm:h-16 rounded-full mx-auto mb-1 border-2 border-gray-500 shadow-md">
+                            <h3 class="text-xs font-bold text-gray-300 mb-0.5 leading-tight">مكان شاغر ${i+1}</h3>
+                            <p class="text-gray-400 mb-1 text-xxs" style="font-size: 0.6rem;">انضم إلينا!</p>
+                        </div>
+                        <button onclick="showModalMessage('اقتراح مهام', 'ميزة اقتراح المهام غير متاحة حاليًا.')" class="btn btn-secondary text-xxs py-1 px-2 w-full mt-auto bg-gray-500 hover:bg-gray-600 text-white rounded" style="font-size: 0.55rem; padding: 0.2rem 0.4rem;">
+                            <i class="fas fa-info-circle mr-1"></i> تفاصيل
+                        </button>
+                    </div>`;
+                }
+                teamMembersListContainer.innerHTML = memberHtml;
+            } catch(e) {
+                console.error("Error in loadProfiles (static data processing):", e);
+                teamMembersListContainer.innerHTML = '<div class="text-center p-4 text-red-500 col-span-full">فشل تحميل ملفات الفريق.</div>';
+                throw e; // Propagate if needed, though less critical for static data
             }
-            teamMembersListContainer.innerHTML = memberHtml;
         }
 
 
@@ -1519,27 +1554,33 @@
             const reactionTypes = ['like', 'love', 'sad'];
             try {
                 for (const type of reactionTypes) {
-                    const { count, error } = await _supabase.from('event_reactions').select('*', { count: 'exact', head: true })
+                    const reactionQuery = _supabase.from('event_reactions').select('*', { count: 'exact', head: true })
                                             .eq('event_id', eventId).eq('reaction_type', type);
+                    const { count, error } = await supabaseQueryWithTimeout(reactionQuery, `FetchReactionCount-${type}-${eventId}`);
+
                     if (error) console.warn(`Error fetching ${type} count for event ${eventId}:`, error.message);
                     const countElement = document.getElementById(`${type}-count${suffix}-${eventId}`);
                     if (countElement) countElement.textContent = count || 0;
                 }
-                const { count: commentsCount, error: commentsError } = await _supabase.from('event_comments')
-                                                                    .select('*', { count: 'exact', head: true })
-                                                                    .eq('event_id', eventId);
+                const commentsQuery = _supabase.from('event_comments')
+                                            .select('*', { count: 'exact', head: true })
+                                            .eq('event_id', eventId);
+                const { count: commentsCount, error: commentsError } = await supabaseQueryWithTimeout(commentsQuery, `FetchCommentCount-${eventId}`);
+
                 if (commentsError) console.warn(`Error fetching comments count for event ${eventId}:`, commentsError.message);
                 const commentCountElement = document.getElementById(`comments-count${suffix}-${eventId}`);
                 if (commentCountElement) commentCountElement.textContent = commentsCount || 0;
-            } catch (e) { console.error("Error in fetchEventCounts:", e); }
+            } catch (e) { console.error("Error in fetchEventCounts (after timeout wrapper):", e); }
         }
 
         async function checkUserReaction(eventId, forDetails = false) {
             if (!currentUser) return;
             const suffix = forDetails ? '-details' : '';
             try {
-                const { data: userReaction, error } = await _supabase.from('event_reactions').select('reaction_type')
+                const reactionQuery = _supabase.from('event_reactions').select('reaction_type')
                                                     .eq('event_id', eventId).eq('user_id', currentUser.id).maybeSingle();
+                const { data: userReaction, error } = await supabaseQueryWithTimeout(reactionQuery, `CheckUserReaction-${eventId}`);
+
                 if (error) throw error;
 
                 const reactionTypes = ['like', 'love', 'sad'];
@@ -1559,7 +1600,9 @@
                         if(userReaction.reaction_type === 'sad') activeIconElement.classList.add('text-yellow-500');
                     }
                 }
-            } catch (error) { console.error(`Error checking user reaction for event ${eventId}:`, error.message); }
+            } catch (error) { 
+                console.error(`Error checking user reaction for event ${eventId} (after timeout wrapper):`, error.message); 
+            }
         }
 
         async function handleReaction(eventId, reactionType, fromDetails = false) {
@@ -1567,8 +1610,10 @@
                 showModalMessage('يجب تسجيل الدخول للتفاعل.', true); navigateTo('login'); return;
             }
             try {
-                const { data: existingReaction, error: fetchError } = await _supabase.from('event_reactions')
+                const existingReactionQuery = _supabase.from('event_reactions')
                     .select('id, reaction_type').eq('event_id', eventId).eq('user_id', currentUser.id).maybeSingle();
+                const { data: existingReaction, error: fetchError } = await supabaseQueryWithTimeout(existingReactionQuery, `HandleReaction-FetchExisting-${eventId}`);
+                
                 if (fetchError) throw fetchError;
 
                 if (existingReaction) {
@@ -1591,7 +1636,7 @@
                 await checkUserReaction(eventId, !fromDetails);
             } catch (error) {
                 showModalMessage(`خطأ في معالجة التفاعل: ${error.message}`, true);
-                console.error("Reaction handling error:", error);
+                console.error("Reaction handling error (after timeout wrapper):", error);
             }
         }
 
@@ -1609,8 +1654,10 @@
             if (!commentText.trim()) { showModalMessage('لا يمكن إرسال تعليق فارغ.', true); return; }
 
             try {
-                const { data: profile, error: profileError } = await _supabase.from('profiles').select('full_name')
+                const profileQuery = _supabase.from('profiles').select('full_name')
                                                                 .eq('id', currentUser.id).single();
+                const { data: profile, error: profileError } = await supabaseQueryWithTimeout(profileQuery, `PostQuickComment-FetchProfile-${currentUser.id}`);
+
                 if (profileError || !profile) throw (profileError || new Error("Profile not found for commenter."));
 
                 const { error: insertError } = await _supabase.from('event_comments').insert({
@@ -1626,26 +1673,27 @@
                 await fetchEventCounts(eventId, true);
             } catch (error) {
                 showModalMessage(`فشل إضافة التعليق: ${error.message}`, true);
-                console.error("Quick comment error:", error);
+                console.error("Quick comment error (after timeout wrapper):", error);
             }
         }
 
         async function loadEvents() {
             if (!upcomingEventsList || !pastEventsList) { 
                 console.error("Event list containers not found in loadEvents."); 
-                throw new Error("Event list containers not found."); // Propagate error
+                throw new Error("Event list containers not found.");
             }
             upcomingEventsList.innerHTML = '<div class="text-center p-4 text-gray-500 col-span-full">جاري تحميل الفعاليات القادمة...</div>';
             pastEventsList.innerHTML = '<div class="text-center p-4 text-gray-500 col-span-full">جاري تحميل الفعاليات السابقة...</div>';
             try {
-                const { data: events, error } = await _supabase.from('project_events').select('*').order('event_date', { ascending: false });
+                const eventsQuery = _supabase.from('project_events').select('*').order('event_date', { ascending: false });
+                const { data: events, error } = await supabaseQueryWithTimeout(eventsQuery, "LoadEvents");
+
                 if (error) {
-                    console.error('Error fetching events (Supabase call in loadEvents):', error);
-                    // Display error message in the UI
+                    console.error('Error fetching events (Supabase call or timeout in loadEvents):', error);
                     upcomingEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات القادمة.</p>';
                     pastEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات السابقة.</p>';
                     showModalMessage(`فشل تحميل الفعاليات: ${error.message}`, true);
-                    throw error; // Propagate Supabase error
+                    throw error; 
                 }
                 
                 const today = new Date().toISOString().split('T')[0];
@@ -1653,21 +1701,25 @@
                 const past = events.filter(e => e.event_date < today);
                 upcomingEventsList.innerHTML = upcoming.length ? upcoming.map(e => createEventCard(e, true)).join('') : '<p class="text-gray-600 p-4 text-center col-span-full">لا توجد فعاليات قادمة حالياً.</p>';
                 pastEventsList.innerHTML = past.length ? past.map(e => createEventCard(e, false)).join('') : '<p class="text-gray-600 p-4 text-center col-span-full">لا توجد فعاليات سابقة.</p>';
-                attachDynamicEventListeners();
+                
+                try { 
+                    attachDynamicEventListeners();
+                } catch (listenerError) {
+                    console.error("Error in attachDynamicEventListeners within loadEvents:", listenerError);
+                }
+
             } catch (e) { 
                 console.error('Overall error caught in loadEvents, re-throwing:', e);
-                // Ensure modal is shown if not already by a specific Supabase error path
                 if (!e.message.includes("فشل تحميل الفعاليات")) {
                      showModalMessage(`خطأ في تحميل الفعاليات: ${e.message}`, true);
                 }
-                // Ensure UI shows error state if not already set by Supabase error
-                if (!upcomingEventsList.innerHTML.includes('text-red-500')) {
+                if (upcomingEventsList && !upcomingEventsList.innerHTML.includes('text-red-500')) {
                     upcomingEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات القادمة.</p>';
                 }
-                if (!pastEventsList.innerHTML.includes('text-red-500')) {
+                if (pastEventsList && !pastEventsList.innerHTML.includes('text-red-500')) {
                     pastEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات السابقة.</p>';
                 }
-                throw e; // Re-throw so navigateTo's catch block can handle it
+                throw e; 
             }
         }
 
@@ -1675,8 +1727,12 @@
             if (!eventDetailsContent || !eventDetailsMainImage || !eventDetailsGallery) {
                 console.error("Event details display elements not found");
                 if(eventDetailsContent) eventDetailsContent.innerHTML = '<p class="text-red-500 p-4 text-center">خطأ في عرض تفاصيل الفعالية (عناصر مفقودة).</p>';
-                throw new Error("Event details display elements not found."); // Propagate
+                throw new Error("Event details display elements not found.");
             }
+            // The eventData is passed in, so no primary Supabase fetch here unless more data is needed.
+            // If eventData itself needs to be re-fetched, that would need the timeout wrapper.
+            // For now, assuming eventData is complete enough from the list click.
+
             eventDetailsContent.innerHTML = '';
             eventDetailsMainImage.src = 'https://placehold.co/800x400/cccccc/969696?text=Loading...';
             eventDetailsMainImage.alt = 'جاري تحميل الصورة الرئيسية...';
@@ -1697,7 +1753,6 @@
             detailsTextContainer.id = "event-details-text-content";
             detailsTextContainer.innerHTML = '<div class="text-center p-4 text-gray-500">جاري تحميل تفاصيل الفعالية...</div>';
             eventDetailsContent.appendChild(detailsTextContainer);
-
 
             try {
                 const breadcrumbTitle = document.getElementById('event-details-breadcrumb-title');
@@ -1727,7 +1782,6 @@
                         eventDetailsGallery.appendChild(thumb);
                     });
                 }
-
 
                 const reactionTypes = [
                     { type: 'like', emoji: '👍', label: 'أعجبني' }, { type: 'love', emoji: '❤️', label: 'أحببته' },
@@ -1762,35 +1816,38 @@
                 await fetchEventCounts(eventData.id, true);
                 await checkUserReaction(eventData.id, true);
                 attachDynamicEventListenersForDetails(detailsTextContainer);
-                await loadEventComments(eventData.id);
-            } catch (error) { // Catch errors from this function's operations
+                await loadEventComments(eventData.id); // This makes a Supabase call
+            } catch (error) { 
                 console.error('Overall error in loadEventDetails, re-throwing:', error);
                 detailsTextContainer.innerHTML = '<p class="text-red-500 p-4 text-center">فشل تحميل تفاصيل الفعالية.</p>';
                  if (!error.message.includes("فشل تحميل تفاصيل الفعالية")) {
                     showModalMessage(`فشل تحميل تفاصيل الفعالية: ${error.message}`, true);
                 }
-                throw error; // Re-throw
+                throw error; 
             }
         }
 
         async function loadEventComments(eventId) {
             if (!eventCommentsList) { 
                 console.error("Event comments list container not found"); 
-                throw new Error("Event comments list container not found."); // Propagate
+                throw new Error("Event comments list container not found.");
             }
             eventCommentsList.innerHTML = '<div class="text-center p-4 text-gray-500">جاري تحميل التعليقات...</div>';
             try {
-                const { data: commentsData, error: commentsError } = await _supabase
+                const commentsQuery = _supabase
                     .from('event_comments')
                     .select('*')
                     .eq('event_id', eventId)
                     .order('created_at', { ascending: false });
+                
+                const { data: commentsData, error: commentsError } = await supabaseQueryWithTimeout(commentsQuery, `LoadEventComments-${eventId}`);
+
 
                 if (commentsError) {
-                    console.error('Error fetching comments (Supabase call):', commentsError);
+                    console.error('Error fetching comments (Supabase call or timeout):', commentsError);
                     eventCommentsList.innerHTML = '<p class="text-red-500 p-4 text-center">فشل تحميل التعليقات.</p>';
                     showModalMessage(`فشل تحميل التعليقات: ${commentsError.message}`, true);
-                    throw commentsError; // Propagate
+                    throw commentsError; 
                 }
 
                 if (commentsData && commentsData.length > 0) {
@@ -1798,11 +1855,14 @@
                         commentsData.map(async (comment) => {
                             let commenterProfile = { avatar_url: null, full_name: null };
                             if (comment.user_id) {
-                                const { data: profileData, error: profileError } = await _supabase
+                                const profileQuery = _supabase
                                     .from('profiles')
                                     .select('avatar_url, full_name')
                                     .eq('id', comment.user_id)
                                     .single();
+                                // Using timeout for these inner fetches too, though a shorter one might be appropriate
+                                const { data: profileData, error: profileError } = await supabaseQueryWithTimeout(profileQuery, `FetchCommenterProfile-${comment.user_id}`, 5000); 
+                                
                                 if (profileError) {
                                     console.warn(`Could not fetch profile for user_id ${comment.user_id} (comment_id: ${comment.id}):`, profileError.message);
                                 } else if (profileData) {
@@ -1930,8 +1990,10 @@
             if (!commentText.trim()) { showModalMessage('لا يمكن إرسال تعليق فارغ.', true); return; }
 
             try {
-                const { data: profile, error: profileError } = await _supabase.from('profiles')
+                const profileQuery = _supabase.from('profiles')
                     .select('full_name').eq('id', currentUser.id).single();
+                const { data: profile, error: profileError } = await supabaseQueryWithTimeout(profileQuery, `AddComment-FetchProfile-${currentUser.id}`);
+                
                 if (profileError || !profile) throw (profileError || new Error("Profile not found for commenter."));
 
                 const { error } = await _supabase.from('event_comments').insert({
@@ -1947,7 +2009,7 @@
                 await fetchEventCounts(currentEventId, false);
             } catch (error) {
                 showModalMessage(`فشل إضافة التعليق: ${error.message}`, true);
-                console.error("Add comment error:", error);
+                console.error("Add comment error (after timeout wrapper):", error);
             }
         });
 
@@ -1994,14 +2056,16 @@
             e.preventDefault();
             const eventId = e.currentTarget.dataset.eventid;
             try {
-                const { data: eventData, error: fetchError } = await _supabase.from('project_events')
+                const eventQuery = _supabase.from('project_events')
                     .select('*').eq('id', eventId).single();
+                const { data: eventData, error: fetchError } = await supabaseQueryWithTimeout(eventQuery, `FetchEventDetails-${eventId}`);
+
                 if (fetchError) throw fetchError;
                 if (eventData) navigateTo('event-details', eventData);
                 else showModalMessage('لم يتم العثور على الفعالية.', true);
             } catch (error) {
                 showModalMessage(`فشل تحميل تفاصيل الفعالية: ${error.message}`, true);
-                console.error("Event details link click error:", error);
+                console.error("Event details link click error (after timeout wrapper):", error);
             }
         }
 
@@ -2045,8 +2109,10 @@
             selectedMainImagePreviewUrl = null;
 
             try {
-                const { data: eventToEdit, error } = await _supabase.from('project_events').select('*')
+                const eventQuery = _supabase.from('project_events').select('*')
                     .eq('id', eventId).eq('user_id', currentUser.id).single();
+                const { data: eventToEdit, error } = await supabaseQueryWithTimeout(eventQuery, `HandleEditEvent-FetchEvent-${eventId}`);
+
                 if (error || !eventToEdit) throw (error || new Error("Event not found or not authorized to edit."));
 
                 document.getElementById('event-form-title').textContent = 'تعديل الفعالية';
@@ -2080,7 +2146,7 @@
             } catch (error) {
                 showModalMessage(`فشل تحميل بيانات الفعالية للتعديل: ${error.message}`, true);
                 editingEventId = null;
-                console.error("Edit event load error:", error);
+                console.error("Edit event load error (after timeout wrapper):", error);
             }
         }
 
