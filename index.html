@@ -1043,60 +1043,64 @@
         }
 
         _supabase.auth.onAuthStateChange(async (event, session) => {
-            const previousUserState = currentUser; 
+            const previousUserId = currentUser?.id; // Capture previous user ID for comparison
+            currentUser = session?.user || null; // Update global currentUser
+            const newUserId = currentUser?.id;
 
             console.log(
-                "onAuthStateChange Triggered - Event:", event,
-                "New Session User ID:", session?.user?.id,
-                "Previous currentUser ID:", previousUserState?.id
+                `onAuthStateChange Triggered - Event: ${event}, New User ID: ${newUserId}, Previous User ID: ${previousUserId}`
             );
-
-            currentUser = session?.user || null; 
 
             await updateAuthState(currentUser); 
 
             if (!initialAuthProcessed) {
-                if (!initialNavigationPromise) { // Only start initial navigation once
+                if (!initialNavigationPromise) { 
                     console.log("onAuthStateChange (Initial Setup): No initial navigation in progress. Starting now.");
-                    initialNavigationPromise = (async () => {
-                        const hash = window.location.hash.substring(1);
-                        let targetPage = 'home'; 
-                        const activeSection = Array.from(contentSections).find(s => !s.classList.contains('hidden-section'));
+                    initialNavigationPromise = (async () => { 
+                        try {
+                            const hash = window.location.hash.substring(1);
+                            let targetPage = 'home'; 
+                            const activeSection = Array.from(contentSections).find(s => !s.classList.contains('hidden-section'));
 
-                        if (hash && document.getElementById(hash)) {
-                            targetPage = hash;
-                            console.log(`onAuthStateChange (Initial): Hash found (#${hash}), will navigate.`);
-                        } else if (activeSection && activeSection.id !== 'login' && activeSection.id !== 'signup' && (!currentUser && (activeSection.id === 'my-profile-section' || activeSection.id === 'event-details'  || activeSection.id === 'events'))) {
-                            console.log(`onAuthStateChange (Initial): On protected page (${activeSection.id}) without user, defaulting to home.`);
-                            targetPage = 'home';
-                        } else if (hash) {
-                            console.warn(`onAuthStateChange (Initial): Hash target #${hash} not found, defaulting to home.`);
-                            targetPage = 'home';
+                            if (hash && document.getElementById(hash)) {
+                                targetPage = hash;
+                                console.log(`onAuthStateChange (Initial Logic): Hash found (#${hash}), target: ${targetPage}`);
+                            } else if (activeSection && activeSection.id !== 'login' && activeSection.id !== 'signup') {
+                                if (!currentUser && (activeSection.id === 'my-profile-section' || activeSection.id === 'event-details'  || activeSection.id === 'events')) {
+                                    console.log(`onAuthStateChange (Initial Logic): On protected page (${activeSection.id}) without user, defaulting to home.`);
+                                    targetPage = 'home';
+                                } else if (currentUser && activeSection.id) {
+                                     console.log(`onAuthStateChange (Initial Logic): User logged in, respecting current active section: ${activeSection.id}`);
+                                     targetPage = activeSection.id;
+                                }
+                            } else if (hash) { 
+                                console.warn(`onAuthStateChange (Initial Logic): Hash target #${hash} not found, defaulting to home.`);
+                                targetPage = 'home';
+                            }
+                            
+                            console.log("onAuthStateChange (Initial Navigation Decision): Navigating to:", targetPage);
+                            await navigateTo(targetPage); 
+                            console.log(`onAuthStateChange (Initial Navigation): Successfully navigated to ${targetPage}.`);
+                        } catch (navError) {
+                            console.error(`onAuthStateChange (Initial Navigation): FAILED to navigate. Error: ${navError.message}`, navError);
+                            if (!document.getElementById('home').classList.contains('hidden-section')) {
+                                console.log("Initial navigation failed, already on home or fallback to home occurred in navigateTo.");
+                            } else {
+                                console.log("Initial navigation failed, attempting fallback navigation to home.");
+                                await navigateTo('home').catch(fallbackErr => console.error("Fallback navigation to home also failed:", fallbackErr.message));
+                            }
+                        } finally {
+                            initialAuthProcessed = true; 
+                            initialNavigationPromise = null; 
+                            console.log("onAuthStateChange (Initial Setup): initialAuthProcessed set to true. Initial navigation promise cleared.");
                         }
-                        
-                        console.log("onAuthStateChange (Initial Navigation Decision): Navigating to:", targetPage);
-                        await navigateTo(targetPage); // This now returns a promise
                     })();
-
-                    try {
-                        await initialNavigationPromise;
-                        console.log("onAuthStateChange (Initial Setup): Initial navigation successful.");
-                    } catch (e) {
-                        console.error("onAuthStateChange (Initial Setup): Initial navigation FAILED.", e.message);
-                        // If initial navigation fails, app might be in a broken state.
-                        // Consider navigating to a safe fallback like 'home' or showing a general error.
-                        // For now, just log and mark as processed.
-                    } finally {
-                        initialAuthProcessed = true; // Mark as processed regardless of success/failure to avoid retrying this block
-                        initialNavigationPromise = null; // Clear the promise
-                        console.log("onAuthStateChange (Initial Setup): initialAuthProcessed set to true.");
-                    }
                 } else {
-                     console.log("onAuthStateChange (Initial Setup): Initial navigation already in progress or completed, skipping duplicate attempt.");
+                     console.log("onAuthStateChange (Initial Setup): An initial navigation promise is already in progress. Skipping new one.");
                 }
-            } else { // initialAuthProcessed is true
+            } else { 
                 console.log("onAuthStateChange (Subsequent Event): Event type:", event);
-                if (event === 'SIGNED_IN' && !previousUserState) { 
+                if (event === 'SIGNED_IN' && previousUserId !== newUserId) { 
                     const currentVisibleSection = Array.from(contentSections).find(s => !s.classList.contains('hidden-section'))?.id;
                     if (currentVisibleSection === 'login' || currentVisibleSection === 'signup') {
                         console.log("onAuthStateChange (Post-Login): User was on login/signup, navigating to home.");
