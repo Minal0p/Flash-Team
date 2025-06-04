@@ -700,45 +700,46 @@
         document.querySelectorAll('.form-button').forEach(el => el.className = `${formButtonStyles} ${el.className}`);
 
         // --- Supabase Query Timeout Wrapper ---
-        async function supabaseQueryWithTimeout(queryPromise, operationName = "Supabase query", timeoutMs = 10000) { // Default timeout 10s
+        async function supabaseQueryWithTimeout(queryPromise, operationName = "Supabase query", timeoutMs = 12000) { // Default timeout 12s
             let timeoutHandle;
+            let querySettled = false; // Flag to track if the original query settled
             console.log(`[TimeoutWrapper - ${operationName}] Setting up timeout for ${timeoutMs}ms.`);
 
             const timeoutPromise = new Promise((_, reject) => {
                 timeoutHandle = setTimeout(() => {
-                    console.warn(`[TimeoutWrapper - ${operationName}] TIMEOUT PROMISE REJECTING after ${timeoutMs}ms.`);
-                    reject(new Error(`${operationName} timed out after ${timeoutMs}ms`));
+                    if (!querySettled) { // Only reject if the original query hasn't settled yet
+                        console.warn(`[TimeoutWrapper - ${operationName}] TIMEOUT PROMISE REJECTING after ${timeoutMs}ms.`);
+                        reject(new Error(`${operationName} timed out after ${timeoutMs}ms`));
+                    } else {
+                        console.log(`[TimeoutWrapper - ${operationName}] Timeout occurred, but query already settled. No action from timeoutPromise.`);
+                    }
                 }, timeoutMs);
             });
             
-            // Wrap the original query to log its settlement and clear timeout
             const wrappedQueryPromise = queryPromise
                 .then(value => {
+                    querySettled = true;
                     console.log(`[TimeoutWrapper - ${operationName}] Original queryPromise RESOLVED.`);
-                    clearTimeout(timeoutHandle); // Query won, clear timeout
-                    return value; // This will be { data, error } from Supabase if successful
+                    clearTimeout(timeoutHandle); 
+                    return value; 
                 })
                 .catch(err => {
+                    querySettled = true;
                     console.error(`[TimeoutWrapper - ${operationName}] Original queryPromise REJECTED.`, err);
-                    clearTimeout(timeoutHandle); // Query won (by rejecting), clear timeout
-                    throw err; // Re-throw the original error to be caught by Promise.race's catch
+                    clearTimeout(timeoutHandle); 
+                    throw err; 
                 });
 
             try {
                 console.log(`[TimeoutWrapper - ${operationName}] Awaiting Promise.race.`);
                 const result = await Promise.race([wrappedQueryPromise, timeoutPromise]);
-                // If wrappedQueryPromise resolved, it's the result.
-                console.log(`[TimeoutWrapper - ${operationName}] Promise.race won by original query. Result:`, result ? 'has data/error' : 'no data/error (unexpected)');
-                // No need to clear timeout here again if wrappedQueryPromise handles it, but doesn't hurt.
+                console.log(`[TimeoutWrapper - ${operationName}] Promise.race won by original query. Result:`, result ? 'has data/error' : 'no data/error');
                 clearTimeout(timeoutHandle); 
                 return result; 
             } catch (error) {
-                // This catch block will execute if:
-                // 1. timeoutPromise rejected (timeout occurred).
-                // 2. wrappedQueryPromise (and thus original queryPromise) rejected.
                 console.error(`[TimeoutWrapper - ${operationName}] Error from Promise.race (either from query or timeout):`, error);
-                clearTimeout(timeoutHandle); // Ensure timeout is cleared.
-                return { data: null, error: error }; // Return a Supabase-like error object.
+                clearTimeout(timeoutHandle); 
+                return { data: null, error: error }; 
             }
         }
 
@@ -1709,9 +1710,12 @@
             
             let eventsData, eventsError;
             try {
-                const eventsQuery = _supabase.from('project_events').select('*').order('event_date', { ascending: false });
-                // Directly use the destructured result from the timeout wrapper
-                const result = await supabaseQueryWithTimeout(eventsQuery, "LoadEvents");
+                // Select only necessary columns
+                const eventsQuery = _supabase.from('project_events')
+                    .select('id, title, description, event_date, main_image_url, image_urls, user_id, created_at')
+                    .order('event_date', { ascending: false });
+                
+                const result = await supabaseQueryWithTimeout(eventsQuery, "LoadEvents"); // Default timeout is 12s now
                 eventsData = result.data;
                 eventsError = result.error;
 
@@ -1720,10 +1724,9 @@
                     upcomingEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات القادمة.</p>';
                     pastEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات السابقة.</p>';
                     showModalMessage(`فشل تحميل الفعاليات: ${eventsError.message}`, true);
-                    throw eventsError; // Propagate error
+                    throw eventsError; 
                 }
                 
-                // Ensure eventsData is an array before filtering
                 if (!Array.isArray(eventsData)) {
                     console.error('LoadEvents: eventsData is not an array after fetch:', eventsData);
                     throw new Error('Invalid data format for events.');
@@ -1736,23 +1739,21 @@
                 pastEventsList.innerHTML = past.length ? past.map(e => createEventCard(e, false)).join('') : '<p class="text-gray-600 p-4 text-center col-span-full">لا توجد فعاليات سابقة.</p>';
                 
                 console.log("loadEvents: DOM updated, now attaching listeners.");
-                attachDynamicEventListeners(); // This must not throw unhandled errors
+                attachDynamicEventListeners(); 
                 console.log("loadEvents: Listeners attached.");
 
             } catch (e) { 
                 console.error('Overall error caught in loadEvents. Error:', e);
-                // Ensure UI reflects error state if not already set
                 if (upcomingEventsList && !upcomingEventsList.innerHTML.includes('text-red-500')) {
                     upcomingEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات القادمة.</p>';
                 }
                 if (pastEventsList && !pastEventsList.innerHTML.includes('text-red-500')) {
                     pastEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات السابقة.</p>';
                 }
-                // Ensure a modal message is shown if not a specific Supabase error message already displayed
                 if (!e.message.includes("فشل تحميل الفعاليات") && !e.message.includes("timed out")) {
                      showModalMessage(`خطأ في تحميل الفعاليات: ${e.message}`, true);
                 }
-                throw e; // Re-throw so navigateTo's catch block can handle it and reset isNavigating
+                throw e; 
             }
         }
 
