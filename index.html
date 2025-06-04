@@ -683,6 +683,7 @@
         let currentEventId = null;
         let currentUser = null;
         let initialAuthProcessed = false;
+        let initialNavigationPromise = null; // To track the first navigation attempt
         let editingEventId = null;
         let isNavigating = false; // Guard flag for navigation
 
@@ -702,12 +703,12 @@
         // --- Supabase Query Timeout Wrapper ---
         async function supabaseQueryWithTimeout(queryPromise, operationName = "Supabase query", timeoutMs = 12000) { // Default timeout 12s
             let timeoutHandle;
-            let querySettled = false; // Flag to track if the original query settled
+            let querySettled = false; 
             console.log(`[TimeoutWrapper - ${operationName}] Setting up timeout for ${timeoutMs}ms.`);
 
             const timeoutPromise = new Promise((_, reject) => {
                 timeoutHandle = setTimeout(() => {
-                    if (!querySettled) { // Only reject if the original query hasn't settled yet
+                    if (!querySettled) { 
                         console.warn(`[TimeoutWrapper - ${operationName}] TIMEOUT PROMISE REJECTING after ${timeoutMs}ms.`);
                         reject(new Error(`${operationName} timed out after ${timeoutMs}ms`));
                     } else {
@@ -748,7 +749,7 @@
         async function navigateTo(targetId, eventData = null) {
             if (isNavigating && targetId !== 'login') { 
                 console.warn(`Navigation to ${targetId} blocked, already navigating (isNavigating=${isNavigating}).`);
-                return;
+                return Promise.reject(new Error("Navigation blocked, another is in progress.")); // Return a rejected promise
             }
             isNavigating = true;
             const navAttemptId = Date.now(); 
@@ -781,7 +782,7 @@
                 }
                 console.log(`[Nav ${navAttemptId}] Resetting isNavigating (profile denied).`);
                 isNavigating = false; 
-                return;
+                return Promise.resolve(); // Return a resolved promise
             }
 
             try {
@@ -817,6 +818,7 @@
                     const homeSection = document.getElementById('home');
                     if (homeSection) homeSection.classList.remove('hidden-section');
                 }
+                return Promise.resolve(); // Navigation successful
             } catch (loadError) {
                 console.error(`[Nav ${navAttemptId}] Error during content loading for ${targetId}:`, loadError.message, loadError);
                 showModalMessage(`فشل تحميل محتوى قسم ${targetId}. الخطأ: ${loadError.message}`, true);
@@ -825,6 +827,7 @@
                      contentSections.forEach(s => s.classList.add('hidden-section'));
                      homeSection.classList.remove('hidden-section');
                 }
+                throw loadError; // Re-throw to be caught by the caller if needed
             } finally {
                 console.log(`[Nav ${navAttemptId}] Navigation to ${targetId} finished. Resetting isNavigating.`);
                 isNavigating = false; 
@@ -836,7 +839,7 @@
             link.addEventListener('click', (e) => {
                 e.preventDefault();
                 const targetId = e.currentTarget.dataset.target;
-                navigateTo(targetId);
+                navigateTo(targetId).catch(err => console.warn("Navigation click error was handled:", err.message)); // Catch errors from navigateTo
                 const mobileMenu = document.getElementById('mobile-menu');
                 if (mobileMenu && !mobileMenu.classList.contains('hidden-section')) {
                     mobileMenu.classList.add('hidden-section');
@@ -962,7 +965,7 @@
                 const { error } = await _supabase.auth.resetPasswordForEmail(email, { redirectTo });
                 if (error) throw error;
                 showModalMessage('إذا كان البريد الإلكتروني موجودًا، فسيتم إرسال رابط إعادة تعيين كلمة المرور إليه.');
-                navigateTo('login');
+                navigateTo('login').catch(err => console.warn("Navigation to login after forgot password error was handled:", err.message));
             } catch (error) {
                 showModalMessage(`خطأ في إرسال رابط إعادة التعيين: ${error.message}`, true);
                 console.error('Forgot password error:', error.message);
@@ -1013,9 +1016,9 @@
                         commenterAvatar.src = 'https://placehold.co/40x40/E0E0E0/B0B0B0?text=User';
                         if (createEventBtnGeneral) createEventBtnGeneral.classList.add('hidden-section');
                     }
-                } catch (e) { // Catches errors from supabaseQueryWithTimeout if it rejects
+                } catch (e) { 
                     console.error("Unexpected error in updateAuthState profile section (after timeout wrapper):", e);
-                    userNameNav.textContent = user.email; // Fallback UI
+                    userNameNav.textContent = user.email; 
                     userAvatarNav.src = 'https://placehold.co/32x32/E0E0E0/B0B0B0?text=U';
                     commenterAvatar.src = 'https://placehold.co/40x40/E0E0E0/B0B0B0?text=User';
                     if (createEventBtnGeneral) createEventBtnGeneral.classList.add('hidden-section');
@@ -1053,45 +1056,63 @@
             await updateAuthState(currentUser); 
 
             if (!initialAuthProcessed) {
-                initialAuthProcessed = true;
-                setTimeout(() => {
-                    const hash = window.location.hash.substring(1);
-                    let targetPage = 'home'; 
-                    const activeSection = Array.from(contentSections).find(s => !s.classList.contains('hidden-section'));
+                if (!initialNavigationPromise) { // Only start initial navigation once
+                    console.log("onAuthStateChange (Initial Setup): No initial navigation in progress. Starting now.");
+                    initialNavigationPromise = (async () => {
+                        const hash = window.location.hash.substring(1);
+                        let targetPage = 'home'; 
+                        const activeSection = Array.from(contentSections).find(s => !s.classList.contains('hidden-section'));
 
-                    if (hash && document.getElementById(hash)) {
-                        targetPage = hash;
-                        console.log(`onAuthStateChange (Initial): Hash found (#${hash}), attempting to navigate.`);
-                    } else if (activeSection && activeSection.id !== 'login' && activeSection.id !== 'signup' && (!currentUser && (activeSection.id === 'my-profile-section' || activeSection.id === 'event-details'  || activeSection.id === 'events'))) {
-                        console.log(`onAuthStateChange (Initial): On protected page (${activeSection.id}) without user, defaulting to home.`);
-                        targetPage = 'home';
-                    } else if (hash) {
-                        console.warn(`onAuthStateChange (Initial): Hash target #${hash} not found, defaulting to home.`);
-                        targetPage = 'home';
+                        if (hash && document.getElementById(hash)) {
+                            targetPage = hash;
+                            console.log(`onAuthStateChange (Initial): Hash found (#${hash}), will navigate.`);
+                        } else if (activeSection && activeSection.id !== 'login' && activeSection.id !== 'signup' && (!currentUser && (activeSection.id === 'my-profile-section' || activeSection.id === 'event-details'  || activeSection.id === 'events'))) {
+                            console.log(`onAuthStateChange (Initial): On protected page (${activeSection.id}) without user, defaulting to home.`);
+                            targetPage = 'home';
+                        } else if (hash) {
+                            console.warn(`onAuthStateChange (Initial): Hash target #${hash} not found, defaulting to home.`);
+                            targetPage = 'home';
+                        }
+                        
+                        console.log("onAuthStateChange (Initial Navigation Decision): Navigating to:", targetPage);
+                        await navigateTo(targetPage); // This now returns a promise
+                    })();
+
+                    try {
+                        await initialNavigationPromise;
+                        console.log("onAuthStateChange (Initial Setup): Initial navigation successful.");
+                    } catch (e) {
+                        console.error("onAuthStateChange (Initial Setup): Initial navigation FAILED.", e.message);
+                        // If initial navigation fails, app might be in a broken state.
+                        // Consider navigating to a safe fallback like 'home' or showing a general error.
+                        // For now, just log and mark as processed.
+                    } finally {
+                        initialAuthProcessed = true; // Mark as processed regardless of success/failure to avoid retrying this block
+                        initialNavigationPromise = null; // Clear the promise
+                        console.log("onAuthStateChange (Initial Setup): initialAuthProcessed set to true.");
                     }
-                    
-                    console.log("onAuthStateChange (Initial Navigation Decision): Navigating to:", targetPage);
-                    navigateTo(targetPage);
-                }, 20); 
-            } else {
-                // Subsequent auth events
+                } else {
+                     console.log("onAuthStateChange (Initial Setup): Initial navigation already in progress or completed, skipping duplicate attempt.");
+                }
+            } else { // initialAuthProcessed is true
+                console.log("onAuthStateChange (Subsequent Event): Event type:", event);
                 if (event === 'SIGNED_IN' && !previousUserState) { 
                     const currentVisibleSection = Array.from(contentSections).find(s => !s.classList.contains('hidden-section'))?.id;
                     if (currentVisibleSection === 'login' || currentVisibleSection === 'signup') {
                         console.log("onAuthStateChange (Post-Login): User was on login/signup, navigating to home.");
-                        navigateTo('home');
+                        navigateTo('home').catch(err => console.warn("Navigation to home after SIGNED_IN failed:", err.message));
                     } else {
                         console.log("onAuthStateChange (Post-Login): User was on section:", currentVisibleSection, "- no automatic navigation to home.");
                     }
                 } else if (event === 'SIGNED_OUT') {
                     console.log("onAuthStateChange (Post-Signout): Navigating to home.");
-                    navigateTo('home');
+                    navigateTo('home').catch(err => console.warn("Navigation to home after SIGNED_OUT failed:", err.message));
                 } else if (event === 'USER_UPDATED' && currentUser) {
                     console.log("onAuthStateChange (User Updated): User data changed.");
                     const myProfileSection = document.getElementById('my-profile-section');
                     if (myProfileSection && !myProfileSection.classList.contains('hidden-section')) {
                         console.log("User updated, reloading my-profile-section data because it is visible.");
-                        await loadCurrentUserProfileData(); 
+                        loadCurrentUserProfileData().catch(err => console.error("Error reloading profile data on USER_UPDATED:", err.message)); 
                     }
                 }
             }
@@ -1251,9 +1272,6 @@
             }
             teamMembersListContainer.innerHTML = '<div class="text-center p-4 text-gray-500 col-span-full">جاري تحميل ملفات الفريق...</div>';
 
-            // This function currently uses static data. If it were to fetch from Supabase,
-            // it would also need the supabaseQueryWithTimeout wrapper.
-            // For now, it's synchronous after the initial setup.
             try {
                 const teamMembersData = [
                     { name: "مينا حنا فهيم", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Mina%20Hanna.png", imgInitial: "م.ح", linkedinUrl: "https://www.linkedin.com/in/engminahanna", facebookUrl: "https://www.facebook.com/Eng.Mina.H.F", phone: "+201203006152" },
@@ -1299,7 +1317,7 @@
             } catch(e) {
                 console.error("Error in loadProfiles (static data processing):", e);
                 teamMembersListContainer.innerHTML = '<div class="text-center p-4 text-red-500 col-span-full">فشل تحميل ملفات الفريق.</div>';
-                throw e; // Propagate if needed, though less critical for static data
+                throw e; 
             }
         }
 
@@ -1439,7 +1457,7 @@
             e.preventDefault();
             if (!currentUser) {
                 showModalMessage('يجب تسجيل الدخول لإنشاء أو تعديل فعالية.', true);
-                navigateTo('login');
+                navigateTo('login').catch(err => console.warn("Navigation to login after create event attempt failed:", err.message));
                 return;
             }
 
@@ -1630,7 +1648,7 @@
 
         async function handleReaction(eventId, reactionType, fromDetails = false) {
             if (!currentUser) {
-                showModalMessage('يجب تسجيل الدخول للتفاعل.', true); navigateTo('login'); return;
+                showModalMessage('يجب تسجيل الدخول للتفاعل.', true); navigateTo('login').catch(err => console.warn("Navigation to login after reaction attempt failed:", err.message)); return;
             }
             try {
                 const existingReactionQuery = _supabase.from('event_reactions')
@@ -1670,7 +1688,7 @@
 
         async function postQuickComment(eventId) {
             if (!currentUser) {
-                showModalMessage('يجب تسجيل الدخول للتعليق.', true); navigateTo('login'); return;
+                showModalMessage('يجب تسجيل الدخول للتعليق.', true); navigateTo('login').catch(err => console.warn("Navigation to login after quick comment attempt failed:", err.message)); return;
             }
             const commentTextElement = document.getElementById(`quick-comment-text-${eventId}`);
             const commentText = commentTextElement.value;
@@ -1715,7 +1733,7 @@
                     .select('id, title, description, event_date, main_image_url, image_urls, user_id, created_at')
                     .order('event_date', { ascending: false });
                 
-                const result = await supabaseQueryWithTimeout(eventsQuery, "LoadEvents"); // Default timeout is 12s now
+                const result = await supabaseQueryWithTimeout(eventsQuery, "LoadEvents");
                 eventsData = result.data;
                 eventsError = result.error;
 
@@ -2014,7 +2032,7 @@
 
         addCommentForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            if (!currentUser) { showModalMessage('يجب تسجيل الدخول للتعليق.', true); navigateTo('login'); return; }
+            if (!currentUser) { showModalMessage('يجب تسجيل الدخول للتعليق.', true); navigateTo('login').catch(err => console.warn("Navigation to login after add comment attempt failed:", err.message)); return; }
             if (!currentEventId) { showModalMessage('لم يتم تحديد فعالية للتعليق عليها.', true); return; }
             const commentText = document.getElementById('comment-text').value;
             if (!commentText.trim()) { showModalMessage('لا يمكن إرسال تعليق فارغ.', true); return; }
@@ -2087,11 +2105,11 @@
             const eventId = e.currentTarget.dataset.eventid;
             try {
                 const eventQuery = _supabase.from('project_events')
-                    .select('*').eq('id', eventId).single();
+                    .select('*').eq('id', eventId).single(); // Keep select('*') here as eventData is passed directly
                 const { data: eventData, error: fetchError } = await supabaseQueryWithTimeout(eventQuery, `FetchEventDetails-${eventId}`);
 
                 if (fetchError) throw fetchError;
-                if (eventData) navigateTo('event-details', eventData);
+                if (eventData) navigateTo('event-details', eventData).catch(err => console.warn("Navigation to event-details failed:", err.message));
                 else showModalMessage('لم يتم العثور على الفعالية.', true);
             } catch (error) {
                 showModalMessage(`فشل تحميل تفاصيل الفعالية: ${error.message}`, true);
@@ -2133,7 +2151,7 @@
         }
 
         async function handleEditEvent(eventId) {
-            if (!currentUser) { showModalMessage('يجب تسجيل الدخول لتعديل الفعالية.', true); navigateTo('login'); return; }
+            if (!currentUser) { showModalMessage('يجب تسجيل الدخول لتعديل الفعالية.', true); navigateTo('login').catch(err => console.warn("Navigation to login for edit event failed:", err.message)); return; }
             editingEventId = eventId;
             eventImageFilesToUpload = [];
             selectedMainImagePreviewUrl = null;
@@ -2170,7 +2188,7 @@
                 if(!document.getElementById('events').classList.contains('hidden-section')) {
                      createEventFormContainer.scrollIntoView({ behavior: 'smooth' });
                 } else {
-                    navigateTo('events');
+                    navigateTo('events').catch(err => console.warn("Navigation to events for edit event failed:", err.message));
                     setTimeout(() => createEventFormContainer.scrollIntoView({ behavior: 'smooth' }), 100);
                 }
             } catch (error) {
@@ -2181,7 +2199,7 @@
         }
 
         async function handleDeleteEvent(eventId, imageurlsJson) {
-            if (!currentUser) { showModalMessage('يجب تسجيل الدخول لحذف الفعالية.', true); navigateTo('login'); return; }
+            if (!currentUser) { showModalMessage('يجب تسجيل الدخول لحذف الفعالية.', true); navigateTo('login').catch(err => console.warn("Navigation to login for delete event failed:", err.message)); return; }
 
             let parsedImageUrls;
             try {
@@ -2233,7 +2251,7 @@
                     await loadEvents();
                     const eventDetailsSection = document.getElementById('event-details');
                     if (eventDetailsSection && !eventDetailsSection.classList.contains('hidden-section') && currentEventId === eventId) {
-                        navigateTo('events');
+                        navigateTo('events').catch(err => console.warn("Navigation to events after delete failed:", err.message));
                     }
                 } catch (error) {
                      showModalMessage(`فشل حذف الفعالية: ${error.message}`, true);
