@@ -702,12 +702,12 @@
 
         // --- Navigation ---
         async function navigateTo(targetId, eventData = null) {
-            if (isNavigating && targetId !== 'login') { // Allow navigation to login even if another is "in progress"
+            if (isNavigating && targetId !== 'login') { 
                 console.warn(`Navigation to ${targetId} blocked, already navigating (isNavigating=${isNavigating}).`);
                 return;
             }
             isNavigating = true;
-            const navAttemptId = Date.now(); // Unique ID for each navigation attempt
+            const navAttemptId = Date.now(); 
             console.log(`[Nav ${navAttemptId}] Starting navigation to: ${targetId}`, eventData);
 
             contentSections.forEach(section => {
@@ -736,7 +736,7 @@
                     if (homeSection) homeSection.classList.remove('hidden-section'); 
                 }
                 console.log(`[Nav ${navAttemptId}] Resetting isNavigating (profile denied).`);
-                isNavigating = false; // Reset before return
+                isNavigating = false; 
                 return;
             }
 
@@ -747,21 +747,25 @@
                     window.scrollTo(0, 0);
 
                     if (targetId === 'profiles') {
-                        console.log(`[Nav ${navAttemptId}] Loading profiles...`);
+                        console.log(`[Nav ${navAttemptId}] AWAITING loadProfiles()...`);
                         await loadProfiles();
+                        console.log(`[Nav ${navAttemptId}] COMPLETED loadProfiles().`);
                     }
                     if (targetId === 'my-profile-section' && currentUser) {
-                        console.log(`[Nav ${navAttemptId}] Loading current user profile data...`);
+                        console.log(`[Nav ${navAttemptId}] AWAITING loadCurrentUserProfileData()...`);
                         await loadCurrentUserProfileData();
+                        console.log(`[Nav ${navAttemptId}] COMPLETED loadCurrentUserProfileData().`);
                     }
                     if (targetId === 'events') {
-                        console.log(`[Nav ${navAttemptId}] Loading events...`);
+                        console.log(`[Nav ${navAttemptId}] AWAITING loadEvents()...`);
                         await loadEvents();
+                        console.log(`[Nav ${navAttemptId}] COMPLETED loadEvents().`);
                     }
                     if (targetId === 'event-details' && eventData) {
                         currentEventId = eventData.id;
-                        console.log(`[Nav ${navAttemptId}] Loading event details for ID: ${currentEventId}`);
+                        console.log(`[Nav ${navAttemptId}] AWAITING loadEventDetails() for ID: ${currentEventId}`);
                         await loadEventDetails(eventData);
+                        console.log(`[Nav ${navAttemptId}] COMPLETED loadEventDetails() for ID: ${currentEventId}`);
                     }
                     console.log(`[Nav ${navAttemptId}] Content loading for ${targetId} presumably complete.`);
                 } else {
@@ -779,7 +783,7 @@
                 }
             } finally {
                 console.log(`[Nav ${navAttemptId}] Navigation to ${targetId} finished. Resetting isNavigating.`);
-                isNavigating = false; // Reset immediately in finally
+                isNavigating = false; 
             }
         }
 
@@ -893,15 +897,12 @@
             console.log("Logout button clicked. Current user before signout:", currentUser);
             if (!currentUser) {
                 showModalMessage('أنت غير مسجل الدخول حاليًا.', true);
-                // await updateAuthState(null); // onAuthStateChange will handle this
-                // navigateTo('home'); // onAuthStateChange will handle this
                 return;
             }
             try {
                 const { error } = await _supabase.auth.signOut();
                 if (error) throw error;
                 showModalMessage('تم تسجيل الخروج بنجاح.');
-                 // onAuthStateChange will trigger and handle UI updates and navigation
             } catch (error) {
                 showModalMessage(`خطأ في تسجيل الخروج: ${error.message}`, true);
                 console.error("Logout error:", error);
@@ -973,15 +974,12 @@
                     if (createEventBtnGeneral) createEventBtnGeneral.classList.add('hidden-section');
                 }
                 
-                // This logic might be redundant if navigateTo handles loading,
-                // but kept for now if direct access to my-profile-section happens.
                 const myProfileSection = document.getElementById('my-profile-section');
                 if (myProfileSection && !myProfileSection.classList.contains('hidden-section')) {
                     if (updateProfileFormContainer) updateProfileFormContainer.classList.remove('hidden-section');
-                    // await loadCurrentUserProfileData(); // navigateTo will handle this if it's the active navigation
                 }
 
-            } else { // User is null
+            } else { 
                 authLinks.className = 'flex items-center gap-2 sm:gap-4';
                 myProfileNavLink.classList.add('hidden-section');
                 if(myProfileNavLinkMobile) myProfileNavLinkMobile.classList.add('hidden-section');
@@ -995,7 +993,7 @@
         }
 
         _supabase.auth.onAuthStateChange(async (event, session) => {
-            const previousUserState = currentUser; // Capture the user state *before* it's updated
+            const previousUserState = currentUser; 
 
             console.log(
                 "onAuthStateChange Triggered - Event:", event,
@@ -1003,9 +1001,9 @@
                 "Previous currentUser ID:", previousUserState?.id
             );
 
-            currentUser = session?.user || null; // Update global currentUser
+            currentUser = session?.user || null; 
 
-            await updateAuthState(currentUser); // Always update UI based on the new auth state
+            await updateAuthState(currentUser); 
 
             if (!initialAuthProcessed) {
                 initialAuthProcessed = true;
@@ -1073,11 +1071,10 @@
                 console.error('No user logged in, cannot load profile data for editing.');
                 const profileFormContainer = document.getElementById('current-user-profile-form-container');
                 if (profileFormContainer) profileFormContainer.classList.add('hidden-section');
-                return;
+                throw new Error("User not logged in, cannot load profile data."); // Throw to indicate failure
             }
             const profileFormContainer = document.getElementById('current-user-profile-form-container');
             if (profileFormContainer) profileFormContainer.classList.remove('hidden-section');
-
 
             try {
                 console.log("loadCurrentUserProfileData: Fetching profile for user ID:", currentUser.id);
@@ -1088,8 +1085,13 @@
                     .single();
 
                 if (error) {
-                    console.error('Error fetching current user profile for editing (loadCurrentUserProfileData):', error);
-                    throw error; // Re-throw to be caught by navigateTo if called from there
+                    console.error('Error fetching current user profile (Supabase call in loadCurrentUserProfileData):', error);
+                    showModalMessage(`فشل تحميل بيانات الملف الشخصي: ${error.message}`, true);
+                    if (updateProfileForm) updateProfileForm.reset();
+                    if(updateAvatarPreview) updateAvatarPreview.src = 'https://placehold.co/100x100/E0E0E0/B0B0B0?text=Avatar';
+                    const roleDisplay = document.getElementById('update-profile-role-display');
+                    if (roleDisplay) roleDisplay.textContent = 'غير محدد';
+                    throw error; // Propagate Supabase error
                 }
 
                 if (profile) {
@@ -1100,20 +1102,21 @@
                     if(document.getElementById('update-profile-role-display')) document.getElementById('update-profile-role-display').textContent = profile.role || 'غير محدد';
                     if(updateAvatarPreview) updateAvatarPreview.src = profile.avatar_url || 'https://placehold.co/100x100/E0E0E0/B0B0B0?text=Avatar';
                 } else {
-                    console.warn("Current user profile not found in DB for ID (loadCurrentUserProfileData):", currentUser.id);
+                    console.warn("Profile not found in DB (loadCurrentUserProfileData):", currentUser.id);
+                    showModalMessage('لم يتم العثور على بيانات الملف الشخصي.', true);
                     if (updateProfileForm) updateProfileForm.reset();
                     if(updateAvatarPreview) updateAvatarPreview.src = 'https://placehold.co/100x100/E0E0E0/B0B0B0?text=Avatar';
                     const roleDisplay = document.getElementById('update-profile-role-display');
                     if (roleDisplay) roleDisplay.textContent = 'غير محدد';
+                    throw new Error("Profile data not found for current user."); // Indicate logical failure
                 }
-            } catch (errorCatch) { // Renamed to avoid conflict with error from Supabase call
-                // This catch is for errors during the try block, including the re-thrown one.
-                console.error('Overall error in loadCurrentUserProfileData:', errorCatch);
-                showModalMessage(`فشل تحميل بيانات الملف الشخصي: ${errorCatch.message}`, true);
-                if (updateProfileForm) updateProfileForm.reset();
-                if(updateAvatarPreview) updateAvatarPreview.src = 'https://placehold.co/100x100/E0E0E0/B0B0B0?text=Avatar';
-                const roleDisplay = document.getElementById('update-profile-role-display');
-                if (roleDisplay) roleDisplay.textContent = 'غير محدد';
+            } catch (e) { 
+                console.error('Overall error caught in loadCurrentUserProfileData, re-throwing:', e);
+                // Ensure modal is shown if not already by a specific Supabase error/logic path
+                if (!(e.message.includes("فشل تحميل بيانات الملف الشخصي")) && !(e.message.includes("لم يتم العثور على بيانات الملف الشخصي"))) {
+                    showModalMessage(`خطأ في تحميل الملف الشخصي: ${e.message}`, true);
+                }
+                throw e; // Re-throw so navigateTo's catch block can handle it
             }
         }
 
@@ -1154,7 +1157,7 @@
                 if (updateError) throw updateError;
 
                 showModalMessage('تم تحديث الملف الشخصي بنجاح!');
-                await updateAuthState(currentUser); // Re-fetch and update navbar, etc.
+                await updateAuthState(currentUser); 
             } catch (error) {
                 showModalMessage(`فشل تحديث الملف الشخصي: ${error.message}`, true);
                 console.error("Profile update error:", error);
@@ -1195,7 +1198,7 @@
         async function loadProfiles() {
             if (!teamMembersListContainer) {
                 console.error("Profile container 'team-members-list' not found.");
-                return;
+                return; // Or throw new Error("Profile container missing");
             }
             teamMembersListContainer.innerHTML = '<div class="text-center p-4 text-gray-500 col-span-full">جاري تحميل ملفات الفريق...</div>';
 
@@ -1261,7 +1264,7 @@
 
         // --- Multiple Image Handling for Event Form ---
         function renderImagePreviews() {
-            eventImagesPreviewContainer.innerHTML = ''; // Clear existing previews
+            eventImagesPreviewContainer.innerHTML = ''; 
 
             if (Array.isArray(existingEventImageUrls)) {
                 existingEventImageUrls.forEach(url => {
@@ -1628,23 +1631,43 @@
         }
 
         async function loadEvents() {
-            if (!upcomingEventsList || !pastEventsList) { console.error("Event list containers not found"); return; }
+            if (!upcomingEventsList || !pastEventsList) { 
+                console.error("Event list containers not found in loadEvents."); 
+                throw new Error("Event list containers not found."); // Propagate error
+            }
             upcomingEventsList.innerHTML = '<div class="text-center p-4 text-gray-500 col-span-full">جاري تحميل الفعاليات القادمة...</div>';
             pastEventsList.innerHTML = '<div class="text-center p-4 text-gray-500 col-span-full">جاري تحميل الفعاليات السابقة...</div>';
             try {
                 const { data: events, error } = await _supabase.from('project_events').select('*').order('event_date', { ascending: false });
-                if (error) throw error;
+                if (error) {
+                    console.error('Error fetching events (Supabase call in loadEvents):', error);
+                    // Display error message in the UI
+                    upcomingEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات القادمة.</p>';
+                    pastEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات السابقة.</p>';
+                    showModalMessage(`فشل تحميل الفعاليات: ${error.message}`, true);
+                    throw error; // Propagate Supabase error
+                }
+                
                 const today = new Date().toISOString().split('T')[0];
                 const upcoming = events.filter(e => e.event_date >= today);
                 const past = events.filter(e => e.event_date < today);
                 upcomingEventsList.innerHTML = upcoming.length ? upcoming.map(e => createEventCard(e, true)).join('') : '<p class="text-gray-600 p-4 text-center col-span-full">لا توجد فعاليات قادمة حالياً.</p>';
                 pastEventsList.innerHTML = past.length ? past.map(e => createEventCard(e, false)).join('') : '<p class="text-gray-600 p-4 text-center col-span-full">لا توجد فعاليات سابقة.</p>';
                 attachDynamicEventListeners();
-            } catch (error) {
-                console.error('Error in loadEvents:', error);
-                upcomingEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات القادمة.</p>';
-                pastEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات السابقة.</p>';
-                showModalMessage(`فشل تحميل الفعاليات: ${error.message}`, true);
+            } catch (e) { 
+                console.error('Overall error caught in loadEvents, re-throwing:', e);
+                // Ensure modal is shown if not already by a specific Supabase error path
+                if (!e.message.includes("فشل تحميل الفعاليات")) {
+                     showModalMessage(`خطأ في تحميل الفعاليات: ${e.message}`, true);
+                }
+                // Ensure UI shows error state if not already set by Supabase error
+                if (!upcomingEventsList.innerHTML.includes('text-red-500')) {
+                    upcomingEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات القادمة.</p>';
+                }
+                if (!pastEventsList.innerHTML.includes('text-red-500')) {
+                    pastEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات السابقة.</p>';
+                }
+                throw e; // Re-throw so navigateTo's catch block can handle it
             }
         }
 
@@ -1652,7 +1675,7 @@
             if (!eventDetailsContent || !eventDetailsMainImage || !eventDetailsGallery) {
                 console.error("Event details display elements not found");
                 if(eventDetailsContent) eventDetailsContent.innerHTML = '<p class="text-red-500 p-4 text-center">خطأ في عرض تفاصيل الفعالية (عناصر مفقودة).</p>';
-                return;
+                throw new Error("Event details display elements not found."); // Propagate
             }
             eventDetailsContent.innerHTML = '';
             eventDetailsMainImage.src = 'https://placehold.co/800x400/cccccc/969696?text=Loading...';
@@ -1740,15 +1763,21 @@
                 await checkUserReaction(eventData.id, true);
                 attachDynamicEventListenersForDetails(detailsTextContainer);
                 await loadEventComments(eventData.id);
-            } catch (error) {
-                console.error('Error in loadEventDetails:', error);
+            } catch (error) { // Catch errors from this function's operations
+                console.error('Overall error in loadEventDetails, re-throwing:', error);
                 detailsTextContainer.innerHTML = '<p class="text-red-500 p-4 text-center">فشل تحميل تفاصيل الفعالية.</p>';
-                showModalMessage(`فشل تحميل تفاصيل الفعالية: ${error.message}`, true);
+                 if (!error.message.includes("فشل تحميل تفاصيل الفعالية")) {
+                    showModalMessage(`فشل تحميل تفاصيل الفعالية: ${error.message}`, true);
+                }
+                throw error; // Re-throw
             }
         }
 
         async function loadEventComments(eventId) {
-            if (!eventCommentsList) { console.error("Event comments list container not found"); return; }
+            if (!eventCommentsList) { 
+                console.error("Event comments list container not found"); 
+                throw new Error("Event comments list container not found."); // Propagate
+            }
             eventCommentsList.innerHTML = '<div class="text-center p-4 text-gray-500">جاري تحميل التعليقات...</div>';
             try {
                 const { data: commentsData, error: commentsError } = await _supabase
@@ -1757,7 +1786,12 @@
                     .eq('event_id', eventId)
                     .order('created_at', { ascending: false });
 
-                if (commentsError) throw commentsError;
+                if (commentsError) {
+                    console.error('Error fetching comments (Supabase call):', commentsError);
+                    eventCommentsList.innerHTML = '<p class="text-red-500 p-4 text-center">فشل تحميل التعليقات.</p>';
+                    showModalMessage(`فشل تحميل التعليقات: ${commentsError.message}`, true);
+                    throw commentsError; // Propagate
+                }
 
                 if (commentsData && commentsData.length > 0) {
                     const commentsWithProfileInfo = await Promise.all(
@@ -1817,10 +1851,15 @@
                 } else {
                     eventCommentsList.innerHTML = '<p class="text-gray-500 p-4 text-center">لا توجد تعليقات حتى الآن. كن أول من يعلق!</p>';
                 }
-            } catch (error) {
-                console.error('Error in loadEventComments:', error);
-                eventCommentsList.innerHTML = '<p class="text-red-500 p-4 text-center">فشل تحميل التعليقات.</p>';
-                showModalMessage(`فشل تحميل التعليقات: ${error.message}`, true);
+            } catch (e) { 
+                console.error('Overall error caught in loadEventComments, re-throwing:', e);
+                 if (!e.message.includes("فشل تحميل التعليقات")) {
+                    showModalMessage(`خطأ في تحميل التعليقات: ${e.message}`, true);
+                }
+                if (!eventCommentsList.innerHTML.includes('text-red-500')) {
+                    eventCommentsList.innerHTML = '<p class="text-red-500 p-4 text-center">فشل تحميل التعليقات.</p>';
+                }
+                throw e; 
             }
         }
 
