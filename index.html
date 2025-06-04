@@ -701,7 +701,7 @@
         document.querySelectorAll('.form-button').forEach(el => el.className = `${formButtonStyles} ${el.className}`);
 
         // --- Supabase Query Timeout Wrapper ---
-        async function supabaseQueryWithTimeout(queryPromise, operationName = "Supabase query", timeoutMs = 12000) { // Default timeout 12s
+        async function supabaseQueryWithTimeout(queryPromise, operationName = "Supabase query", timeoutMs = 5000) { // Default timeout 5s
             let timeoutHandle;
             let querySettled = false; 
             console.log(`[TimeoutWrapper - ${operationName}] Setting up timeout for ${timeoutMs}ms.`);
@@ -1043,8 +1043,8 @@
         }
 
         _supabase.auth.onAuthStateChange(async (event, session) => {
-            const previousUserId = currentUser?.id; // Capture previous user ID for comparison
-            currentUser = session?.user || null; // Update global currentUser
+            const previousUserId = currentUser?.id; 
+            currentUser = session?.user || null; 
             const newUserId = currentUser?.id;
 
             console.log(
