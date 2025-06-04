@@ -702,12 +702,13 @@
 
         // --- Navigation ---
         async function navigateTo(targetId, eventData = null) {
-            if (isNavigating && targetId !== 'login') {
-                console.warn(`Navigation to ${targetId} blocked, already navigating.`);
+            if (isNavigating && targetId !== 'login') { // Allow navigation to login even if another is "in progress"
+                console.warn(`Navigation to ${targetId} blocked, already navigating (isNavigating=${isNavigating}).`);
                 return;
             }
             isNavigating = true;
-            console.log(`Navigating to: ${targetId}`, eventData);
+            const navAttemptId = Date.now(); // Unique ID for each navigation attempt
+            console.log(`[Nav ${navAttemptId}] Starting navigation to: ${targetId}`, eventData);
 
             contentSections.forEach(section => {
                 section.classList.add('hidden-section');
@@ -722,7 +723,7 @@
             const targetSection = document.getElementById(targetId);
 
             if (targetId === 'my-profile-section' && !currentUser) {
-                console.log("Access to my-profile-section denied, showing login.");
+                console.log(`[Nav ${navAttemptId}] Access to my-profile-section denied, user not logged in. Showing login.`);
                 const loginSection = document.getElementById('login');
                 if (loginSection) {
                     loginSection.classList.remove('hidden-section');
@@ -732,43 +733,53 @@
                     });
                 } else {
                     const homeSection = document.getElementById('home');
-                    if (homeSection) homeSection.classList.remove('hidden-section'); // Fallback
+                    if (homeSection) homeSection.classList.remove('hidden-section'); 
                 }
-                isNavigating = false; // Reset here as well
+                console.log(`[Nav ${navAttemptId}] Resetting isNavigating (profile denied).`);
+                isNavigating = false; // Reset before return
                 return;
             }
 
-            try { // ADDED try block
+            try {
                 if (targetSection) {
+                    console.log(`[Nav ${navAttemptId}] Showing section: ${targetId}`);
                     targetSection.classList.remove('hidden-section');
                     window.scrollTo(0, 0);
-                    // Moved content loading inside try
-                    if (targetId === 'profiles') await loadProfiles();
+
+                    if (targetId === 'profiles') {
+                        console.log(`[Nav ${navAttemptId}] Loading profiles...`);
+                        await loadProfiles();
+                    }
                     if (targetId === 'my-profile-section' && currentUser) {
+                        console.log(`[Nav ${navAttemptId}] Loading current user profile data...`);
                         await loadCurrentUserProfileData();
                     }
-                    if (targetId === 'events') await loadEvents();
+                    if (targetId === 'events') {
+                        console.log(`[Nav ${navAttemptId}] Loading events...`);
+                        await loadEvents();
+                    }
                     if (targetId === 'event-details' && eventData) {
                         currentEventId = eventData.id;
+                        console.log(`[Nav ${navAttemptId}] Loading event details for ID: ${currentEventId}`);
                         await loadEventDetails(eventData);
                     }
+                    console.log(`[Nav ${navAttemptId}] Content loading for ${targetId} presumably complete.`);
                 } else {
-                    console.error(`Section with id "${targetId}" not found. Defaulting to home.`);
+                    console.error(`[Nav ${navAttemptId}] Section with id "${targetId}" not found. Defaulting to home.`);
                     const homeSection = document.getElementById('home');
                     if (homeSection) homeSection.classList.remove('hidden-section');
                 }
             } catch (loadError) {
-                console.error(`Error loading content for ${targetId}:`, loadError);
+                console.error(`[Nav ${navAttemptId}] Error during content loading for ${targetId}:`, loadError);
                 showModalMessage(`فشل تحميل محتوى قسم ${targetId}.`, true);
-                // Fallback to home section on error
                 const homeSection = document.getElementById('home');
                 if (homeSection) {
-                     contentSections.forEach(s => s.classList.add('hidden-section')); // Hide all
-                     homeSection.classList.remove('hidden-section'); // Show home
+                     contentSections.forEach(s => s.classList.add('hidden-section'));
+                     homeSection.classList.remove('hidden-section');
                 }
-            } finally { // ADDED finally block
-                // Ensure isNavigating is reset, regardless of success or failure
-                setTimeout(() => { isNavigating = false; }, 50);
+            } finally {
+                console.log(`[Nav ${navAttemptId}] Navigation to ${targetId} finished. Resetting isNavigating.`);
+                isNavigating = false; // Reset immediately in finally
             }
         }
 
@@ -849,7 +860,7 @@
                     options: {
                         data: {
                             full_name: fullName,
-                            user_name: fullName, // Using full_name as user_name initially
+                            user_name: fullName, 
                             academic_id: academicId || null,
                             role: assignedRole
                         },
@@ -882,15 +893,15 @@
             console.log("Logout button clicked. Current user before signout:", currentUser);
             if (!currentUser) {
                 showModalMessage('أنت غير مسجل الدخول حاليًا.', true);
-                await updateAuthState(null);
-                navigateTo('home');
+                // await updateAuthState(null); // onAuthStateChange will handle this
+                // navigateTo('home'); // onAuthStateChange will handle this
                 return;
             }
             try {
                 const { error } = await _supabase.auth.signOut();
                 if (error) throw error;
                 showModalMessage('تم تسجيل الخروج بنجاح.');
-                 // State will be updated by onAuthStateChange
+                 // onAuthStateChange will trigger and handle UI updates and navigation
             } catch (error) {
                 showModalMessage(`خطأ في تسجيل الخروج: ${error.message}`, true);
                 console.error("Logout error:", error);
@@ -914,7 +925,7 @@
         });
 
         async function updateAuthState(user) {
-            console.log("Updating auth state for user:", user);
+            console.log("Updating auth state for user (ID):", user?.id);
             const updateProfileFormContainer = document.getElementById('current-user-profile-form-container');
 
             if (user) {
@@ -931,7 +942,7 @@
                         .single();
 
                     if (profileError) {
-                        console.error("Error fetching profile for UI update (updateAuthState):", profileError); // ADDED for better debugging
+                        console.error("Error fetching profile for UI update (updateAuthState):", profileError);
                         userNameNav.textContent = user.email;
                         userAvatarNav.src = 'https://placehold.co/32x32/E0E0E0/B0B0B0?text=U';
                         commenterAvatar.src = 'https://placehold.co/40x40/E0E0E0/B0B0B0?text=User';
@@ -948,7 +959,7 @@
                             }
                         }
                     } else {
-                        console.warn("User authenticated but profile not found in DB for ID (updateAuthState):", user.id); // Important log
+                        console.warn("User authenticated but profile not found in DB for ID (updateAuthState):", user.id);
                         userNameNav.textContent = user.email;
                         userAvatarNav.src = 'https://placehold.co/32x32/E0E0E0/B0B0B0?text=U';
                         commenterAvatar.src = 'https://placehold.co/40x40/E0E0E0/B0B0B0?text=User';
@@ -961,14 +972,16 @@
                     commenterAvatar.src = 'https://placehold.co/40x40/E0E0E0/B0B0B0?text=User';
                     if (createEventBtnGeneral) createEventBtnGeneral.classList.add('hidden-section');
                 }
-
+                
+                // This logic might be redundant if navigateTo handles loading,
+                // but kept for now if direct access to my-profile-section happens.
                 const myProfileSection = document.getElementById('my-profile-section');
                 if (myProfileSection && !myProfileSection.classList.contains('hidden-section')) {
                     if (updateProfileFormContainer) updateProfileFormContainer.classList.remove('hidden-section');
-                    await loadCurrentUserProfileData();
+                    // await loadCurrentUserProfileData(); // navigateTo will handle this if it's the active navigation
                 }
 
-            } else {
+            } else { // User is null
                 authLinks.className = 'flex items-center gap-2 sm:gap-4';
                 myProfileNavLink.classList.add('hidden-section');
                 if(myProfileNavLinkMobile) myProfileNavLinkMobile.classList.add('hidden-section');
@@ -982,38 +995,60 @@
         }
 
         _supabase.auth.onAuthStateChange(async (event, session) => {
-            console.log("onAuthStateChange - Event:", event, "Session:", session);
-            const previousUser = currentUser;
-            currentUser = session?.user || null;
-            if (currentUser) {
-                console.log("Current User ID (onAuthStateChange):", currentUser.id);
-            }
+            const previousUserState = currentUser; // Capture the user state *before* it's updated
 
+            console.log(
+                "onAuthStateChange Triggered - Event:", event,
+                "New Session User ID:", session?.user?.id,
+                "Previous currentUser ID:", previousUserState?.id
+            );
 
-            await updateAuthState(currentUser);
+            currentUser = session?.user || null; // Update global currentUser
+
+            await updateAuthState(currentUser); // Always update UI based on the new auth state
 
             if (!initialAuthProcessed) {
                 initialAuthProcessed = true;
                 setTimeout(() => {
                     const hash = window.location.hash.substring(1);
-                    let targetPage = 'home';
+                    let targetPage = 'home'; 
+                    const activeSection = Array.from(contentSections).find(s => !s.classList.contains('hidden-section'));
+
                     if (hash && document.getElementById(hash)) {
                         targetPage = hash;
+                        console.log(`onAuthStateChange (Initial): Hash found (#${hash}), attempting to navigate.`);
+                    } else if (activeSection && activeSection.id !== 'login' && activeSection.id !== 'signup' && (!currentUser && (activeSection.id === 'my-profile-section' || activeSection.id === 'event-details'  || activeSection.id === 'events'))) {
+                        console.log(`onAuthStateChange (Initial): On protected page (${activeSection.id}) without user, defaulting to home.`);
+                        targetPage = 'home';
                     } else if (hash) {
-                        console.warn(`Hash target #${hash} not found, defaulting to home.`);
+                        console.warn(`onAuthStateChange (Initial): Hash target #${hash} not found, defaulting to home.`);
+                        targetPage = 'home';
                     }
-                    console.log("onAuthStateChange (Initial Navigation): Navigating to:", targetPage);
+                    
+                    console.log("onAuthStateChange (Initial Navigation Decision): Navigating to:", targetPage);
                     navigateTo(targetPage);
-                }, 0);
-            } else if (event === 'SIGNED_IN' && !previousUser) {
-                const currentSectionId = Array.from(contentSections).find(s => !s.classList.contains('hidden-section'))?.id;
-                if (currentSectionId === 'login' || currentSectionId === 'signup') {
-                    console.log("onAuthStateChange (Post-Login Navigation): Navigating to home.");
+                }, 20); 
+            } else {
+                // Subsequent auth events
+                if (event === 'SIGNED_IN' && !previousUserState) { 
+                    const currentVisibleSection = Array.from(contentSections).find(s => !s.classList.contains('hidden-section'))?.id;
+                    if (currentVisibleSection === 'login' || currentVisibleSection === 'signup') {
+                        console.log("onAuthStateChange (Post-Login): User was on login/signup, navigating to home.");
+                        navigateTo('home');
+                    } else {
+                        console.log("onAuthStateChange (Post-Login): User was on section:", currentVisibleSection, "- no automatic navigation to home.");
+                    }
+                } else if (event === 'SIGNED_OUT') {
+                    console.log("onAuthStateChange (Post-Signout): Navigating to home.");
                     navigateTo('home');
+                } else if (event === 'USER_UPDATED' && currentUser) {
+                    console.log("onAuthStateChange (User Updated): User data changed.");
+                    const myProfileSection = document.getElementById('my-profile-section');
+                    if (myProfileSection && !myProfileSection.classList.contains('hidden-section')) {
+                        console.log("User updated, reloading my-profile-section data because it is visible.");
+                        await loadCurrentUserProfileData(); 
+                    }
                 }
-            } else if (event === 'SIGNED_OUT') {
-                console.log("onAuthStateChange (Post-Signout Navigation): Navigating to home.");
-                navigateTo('home');
             }
         });
 
@@ -1035,7 +1070,7 @@
 
         async function loadCurrentUserProfileData() {
             if (!currentUser) {
-                console.error('No user logged in, cannot load profile data.');
+                console.error('No user logged in, cannot load profile data for editing.');
                 const profileFormContainer = document.getElementById('current-user-profile-form-container');
                 if (profileFormContainer) profileFormContainer.classList.add('hidden-section');
                 return;
@@ -1045,32 +1080,38 @@
 
 
             try {
+                console.log("loadCurrentUserProfileData: Fetching profile for user ID:", currentUser.id);
                 const { data: profile, error } = await _supabase
                     .from('profiles')
                     .select('full_name, User_Name, academic_id, role, avatar_url')
                     .eq('id', currentUser.id)
                     .single();
 
-                if (error) throw error;
+                if (error) {
+                    console.error('Error fetching current user profile for editing (loadCurrentUserProfileData):', error);
+                    throw error; // Re-throw to be caught by navigateTo if called from there
+                }
 
                 if (profile) {
-                    document.getElementById('update-full-name').value = profile.full_name || '';
-                    document.getElementById('update-user-name').value = profile.User_Name || '';
-                    document.getElementById('update-academic-id').value = profile.academic_id || '';
-                    document.getElementById('update-profile-role-display').textContent = profile.role || 'غير محدد';
-                    updateAvatarPreview.src = profile.avatar_url || 'https://placehold.co/100x100/E0E0E0/B0B0B0?text=Avatar';
+                    console.log("loadCurrentUserProfileData: Profile data found:", profile);
+                    if(document.getElementById('update-full-name')) document.getElementById('update-full-name').value = profile.full_name || '';
+                    if(document.getElementById('update-user-name')) document.getElementById('update-user-name').value = profile.User_Name || '';
+                    if(document.getElementById('update-academic-id')) document.getElementById('update-academic-id').value = profile.academic_id || '';
+                    if(document.getElementById('update-profile-role-display')) document.getElementById('update-profile-role-display').textContent = profile.role || 'غير محدد';
+                    if(updateAvatarPreview) updateAvatarPreview.src = profile.avatar_url || 'https://placehold.co/100x100/E0E0E0/B0B0B0?text=Avatar';
                 } else {
                     console.warn("Current user profile not found in DB for ID (loadCurrentUserProfileData):", currentUser.id);
                     if (updateProfileForm) updateProfileForm.reset();
-                    updateAvatarPreview.src = 'https://placehold.co/100x100/E0E0E0/B0B0B0?text=Avatar';
+                    if(updateAvatarPreview) updateAvatarPreview.src = 'https://placehold.co/100x100/E0E0E0/B0B0B0?text=Avatar';
                     const roleDisplay = document.getElementById('update-profile-role-display');
                     if (roleDisplay) roleDisplay.textContent = 'غير محدد';
                 }
-            } catch (error) {
-                console.error('Error fetching current user profile for editing:', error);
-                showModalMessage(`فشل تحميل بيانات الملف الشخصي: ${error.message}`, true);
+            } catch (errorCatch) { // Renamed to avoid conflict with error from Supabase call
+                // This catch is for errors during the try block, including the re-thrown one.
+                console.error('Overall error in loadCurrentUserProfileData:', errorCatch);
+                showModalMessage(`فشل تحميل بيانات الملف الشخصي: ${errorCatch.message}`, true);
                 if (updateProfileForm) updateProfileForm.reset();
-                updateAvatarPreview.src = 'https://placehold.co/100x100/E0E0E0/B0B0B0?text=Avatar';
+                if(updateAvatarPreview) updateAvatarPreview.src = 'https://placehold.co/100x100/E0E0E0/B0B0B0?text=Avatar';
                 const roleDisplay = document.getElementById('update-profile-role-display');
                 if (roleDisplay) roleDisplay.textContent = 'غير محدد';
             }
@@ -1113,7 +1154,7 @@
                 if (updateError) throw updateError;
 
                 showModalMessage('تم تحديث الملف الشخصي بنجاح!');
-                await updateAuthState(currentUser);
+                await updateAuthState(currentUser); // Re-fetch and update navbar, etc.
             } catch (error) {
                 showModalMessage(`فشل تحديث الملف الشخصي: ${error.message}`, true);
                 console.error("Profile update error:", error);
