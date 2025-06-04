@@ -701,7 +701,7 @@
         document.querySelectorAll('.form-button').forEach(el => el.className = `${formButtonStyles} ${el.className}`);
 
         // --- Supabase Query Timeout Wrapper ---
-        async function supabaseQueryWithTimeout(queryPromise, operationName = "Supabase query", timeoutMs = 5000) { // Default timeout 5s
+        async function supabaseQueryWithTimeout(queryPromise, operationName = "Supabase query", timeoutMs = 100) { // Default timeout 0.1s
             let timeoutHandle;
             let querySettled = false; 
             console.log(`[TimeoutWrapper - ${operationName}] Setting up timeout for ${timeoutMs}ms.`);
@@ -749,7 +749,7 @@
         async function navigateTo(targetId, eventData = null) {
             if (isNavigating && targetId !== 'login') { 
                 console.warn(`Navigation to ${targetId} blocked, already navigating (isNavigating=${isNavigating}).`);
-                return Promise.reject(new Error("Navigation blocked, another is in progress.")); // Return a rejected promise
+                return Promise.reject(new Error("Navigation blocked, another is in progress.")); 
             }
             isNavigating = true;
             const navAttemptId = Date.now(); 
@@ -782,7 +782,7 @@
                 }
                 console.log(`[Nav ${navAttemptId}] Resetting isNavigating (profile denied).`);
                 isNavigating = false; 
-                return Promise.resolve(); // Return a resolved promise
+                return Promise.resolve(); 
             }
 
             try {
@@ -818,7 +818,7 @@
                     const homeSection = document.getElementById('home');
                     if (homeSection) homeSection.classList.remove('hidden-section');
                 }
-                return Promise.resolve(); // Navigation successful
+                return Promise.resolve(); 
             } catch (loadError) {
                 console.error(`[Nav ${navAttemptId}] Error during content loading for ${targetId}:`, loadError.message, loadError);
                 showModalMessage(`فشل تحميل محتوى قسم ${targetId}. الخطأ: ${loadError.message}`, true);
@@ -827,7 +827,7 @@
                      contentSections.forEach(s => s.classList.add('hidden-section'));
                      homeSection.classList.remove('hidden-section');
                 }
-                throw loadError; // Re-throw to be caught by the caller if needed
+                throw loadError; 
             } finally {
                 console.log(`[Nav ${navAttemptId}] Navigation to ${targetId} finished. Resetting isNavigating.`);
                 isNavigating = false; 
@@ -839,7 +839,7 @@
             link.addEventListener('click', (e) => {
                 e.preventDefault();
                 const targetId = e.currentTarget.dataset.target;
-                navigateTo(targetId).catch(err => console.warn("Navigation click error was handled:", err.message)); // Catch errors from navigateTo
+                navigateTo(targetId).catch(err => console.warn("Navigation click error was handled:", err.message)); 
                 const mobileMenu = document.getElementById('mobile-menu');
                 if (mobileMenu && !mobileMenu.classList.contains('hidden-section')) {
                     mobileMenu.classList.add('hidden-section');
