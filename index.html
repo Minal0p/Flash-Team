@@ -701,7 +701,7 @@
         document.querySelectorAll('.form-button').forEach(el => el.className = `${formButtonStyles} ${el.className}`);
 
         // --- Supabase Query Timeout Wrapper ---
-        async function supabaseQueryWithTimeout(queryPromise, operationName = "Supabase query", timeoutMs = 3000) { // Default timeout 3s
+        async function supabaseQueryWithTimeout(queryPromise, operationName = "Supabase query", timeoutMs = 10000) { // Default timeout 10s
             let timeoutHandle;
             let querySettled = false; 
             console.log(`[TimeoutWrapper - ${operationName}] Setting up timeout for ${timeoutMs}ms.`);
@@ -901,7 +901,7 @@
 
             let assignedRole = 'user';
             if (enteredAdminCode === ADMIN_SECRET_CODE) {
-                assignedRole = 'admin';
+                assignedRole = 'admin'; // This can be changed to 'full_access_user' if needed
             }
 
             try {
@@ -915,7 +915,7 @@
                             academic_id: academicId || null,
                             role: assignedRole
                         },
-                        emailRedirectTo: 'https://minalop.github.io/Flash-Team-Confirmation/'
+                        emailRedirectTo: 'https://minal0p.github.io/Flash-Team-Confirmation/' // UPDATED URL
                     }
                 });
 
@@ -959,7 +959,7 @@
         forgotPasswordForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = document.getElementById('forgot-password-email').value;
-            const redirectTo = 'https://minal0p.github.io/Flash-Team-Reset-Password/';
+            const redirectTo = 'https://minal0p.github.io/Flash-Team-Reset-Password/'; // Ensure this is also correct in Supabase
 
             try {
                 const { error } = await _supabase.auth.resetPasswordForEmail(email, { redirectTo });
@@ -998,7 +998,7 @@
                         userAvatarNav.src = 'https://placehold.co/32x32/E0E0E0/B0B0B0?text=U';
                         commenterAvatar.src = 'https://placehold.co/40x40/E0E0E0/B0B0B0?text=User';
                         if (createEventBtnGeneral) {
-                            console.log("updateAuthState: Hiding create event button due to profile fetch error or timeout.");
+                            console.log("updateAuthState: Hiding create event button due to profile fetch error or timeout. Error:", profileError?.message);
                             createEventBtnGeneral.classList.add('hidden-section');
                         }
                     } else if (profile) {
@@ -1007,11 +1007,11 @@
                         userAvatarNav.src = profile.avatar_url || 'https://placehold.co/32x32/E0E0E0/B0B0B0?text=U';
                         commenterAvatar.src = profile.avatar_url || 'https://placehold.co/40x40/E0E0E0/B0B0B0?text=User';
                         if (createEventBtnGeneral) {
-                            if (profile.role === 'admin') {
-                                console.log("updateAuthState: User is admin, showing create event button.");
+                            if (profile.role === 'full_access_user') { 
+                                console.log("updateAuthState: User is full_access_user, showing create event button.");
                                 createEventBtnGeneral.classList.remove('hidden-section');
                             } else {
-                                console.log("updateAuthState: User is not admin, hiding create event button.");
+                                console.log("updateAuthState: User is not full_access_user (role: " + profile.role + "), hiding create event button.");
                                 createEventBtnGeneral.classList.add('hidden-section');
                             }
                         }
