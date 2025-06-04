@@ -993,19 +993,25 @@
 
 
                     if (profileError) {
-                        console.error("Error fetching profile for UI update (updateAuthState):", profileError);
+                        console.error("Error fetching profile for UI update (updateAuthState):", profileError.message, profileError);
                         userNameNav.textContent = user.email;
                         userAvatarNav.src = 'https://placehold.co/32x32/E0E0E0/B0B0B0?text=U';
                         commenterAvatar.src = 'https://placehold.co/40x40/E0E0E0/B0B0B0?text=User';
-                        if (createEventBtnGeneral) createEventBtnGeneral.classList.add('hidden-section');
+                        if (createEventBtnGeneral) {
+                            console.log("updateAuthState: Hiding create event button due to profile fetch error or timeout.");
+                            createEventBtnGeneral.classList.add('hidden-section');
+                        }
                     } else if (profile) {
+                        console.log("updateAuthState: Profile fetched successfully. Role:", profile.role);
                         userNameNav.textContent = profile.full_name || user.email;
                         userAvatarNav.src = profile.avatar_url || 'https://placehold.co/32x32/E0E0E0/B0B0B0?text=U';
                         commenterAvatar.src = profile.avatar_url || 'https://placehold.co/40x40/E0E0E0/B0B0B0?text=User';
                         if (createEventBtnGeneral) {
                             if (profile.role === 'admin') {
+                                console.log("updateAuthState: User is admin, showing create event button.");
                                 createEventBtnGeneral.classList.remove('hidden-section');
                             } else {
+                                console.log("updateAuthState: User is not admin, hiding create event button.");
                                 createEventBtnGeneral.classList.add('hidden-section');
                             }
                         }
@@ -1014,14 +1020,20 @@
                         userNameNav.textContent = user.email;
                         userAvatarNav.src = 'https://placehold.co/32x32/E0E0E0/B0B0B0?text=U';
                         commenterAvatar.src = 'https://placehold.co/40x40/E0E0E0/B0B0B0?text=User';
-                        if (createEventBtnGeneral) createEventBtnGeneral.classList.add('hidden-section');
+                        if (createEventBtnGeneral) {
+                             console.log("updateAuthState: Hiding create event button because profile was not found.");
+                            createEventBtnGeneral.classList.add('hidden-section');
+                        }
                     }
                 } catch (e) { 
                     console.error("Unexpected error in updateAuthState profile section (after timeout wrapper):", e);
                     userNameNav.textContent = user.email; 
                     userAvatarNav.src = 'https://placehold.co/32x32/E0E0E0/B0B0B0?text=U';
                     commenterAvatar.src = 'https://placehold.co/40x40/E0E0E0/B0B0B0?text=User';
-                    if (createEventBtnGeneral) createEventBtnGeneral.classList.add('hidden-section');
+                    if (createEventBtnGeneral) {
+                        console.log("updateAuthState: Hiding create event button due to unexpected error.");
+                        createEventBtnGeneral.classList.add('hidden-section');
+                    }
                 }
                 
                 const myProfileSection = document.getElementById('my-profile-section');
@@ -1038,7 +1050,10 @@
                 userAvatarNav.src = 'https://placehold.co/32x32/E0E0E0/B0B0B0?text=U';
                 commenterAvatar.src = 'https://placehold.co/40x40/E0E0E0/B0B0B0?text=User';
                 if (updateProfileFormContainer) updateProfileFormContainer.classList.add('hidden-section');
-                if (createEventBtnGeneral) createEventBtnGeneral.classList.add('hidden-section');
+                if (createEventBtnGeneral) {
+                    console.log("updateAuthState: User is null, hiding create event button.");
+                    createEventBtnGeneral.classList.add('hidden-section');
+                }
             }
         }
 
