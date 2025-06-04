@@ -1743,14 +1743,16 @@
 
                 if (eventsError) {
                     console.error('Error fetching events (Supabase call or timeout in loadEvents):', eventsError);
-                    upcomingEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات القادمة.</p>';
-                    pastEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات السابقة.</p>';
+                    upcomingEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات القادمة. قد يكون هناك بطء في الشبكة أو الخادم.</p>';
+                    pastEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات السابقة. قد يكون هناك بطء في الشبكة أو الخادم.</p>';
                     showModalMessage(`فشل تحميل الفعاليات: ${eventsError.message}`, true);
                     throw eventsError; 
                 }
                 
                 if (!Array.isArray(eventsData)) {
                     console.error('LoadEvents: eventsData is not an array after fetch:', eventsData);
+                    upcomingEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">خطأ في تنسيق بيانات الفعاليات القادمة.</p>';
+                    pastEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">خطأ في تنسيق بيانات الفعاليات السابقة.</p>';
                     throw new Error('Invalid data format for events.');
                 }
 
@@ -1767,10 +1769,10 @@
             } catch (e) { 
                 console.error('Overall error caught in loadEvents. Error:', e);
                 if (upcomingEventsList && !upcomingEventsList.innerHTML.includes('text-red-500')) {
-                    upcomingEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات القادمة.</p>';
+                    upcomingEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات القادمة. قد يكون هناك بطء في الشبكة أو الخادم.</p>';
                 }
                 if (pastEventsList && !pastEventsList.innerHTML.includes('text-red-500')) {
-                    pastEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات السابقة.</p>';
+                    pastEventsList.innerHTML = '<p class="text-red-500 p-4 text-center col-span-full">فشل تحميل الفعاليات السابقة. قد يكون هناك بطء في الشبكة أو الخادم.</p>';
                 }
                 if (!e.message.includes("فشل تحميل الفعاليات") && !e.message.includes("timed out")) {
                      showModalMessage(`خطأ في تحميل الفعاليات: ${e.message}`, true);
