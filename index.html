@@ -488,8 +488,8 @@
                             <div id="event-images-preview-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 mb-4">
                                 </div>
                             <div class="mb-4">
-                                <label for="event-image-files" class="block text-sm font-medium text-gray-700">صور الفعالية (حتى 10 صور)</label>
-                                <input type="file" id="event-image-files" name="imageFiles" accept="image/*" multiple class="input-field mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-[#1978e5] hover:file:bg-blue-100">
+                                <label for="event-image-files" class="block text-sm font-medium text-gray-700">ملفات الفعالية (حتى 10 ملفات)</label>
+                                <input type="file" id="event-image-files" name="imageFiles" multiple class="input-field mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-[#1978e5] hover:file:bg-blue-100">
                                 <p class="text-xs text-gray-500 mt-1">اختر صورة واحدة لتكون الصورة الرئيسية للفعالية من خلال النقر عليها في المعاينة.</p>
                             </div>
 
@@ -690,6 +690,7 @@
         // --- Variables for multiple image handling ---
         let eventImageFilesToUpload = [];
         let existingEventImageUrls = [];
+        let imageUrlsPendingDeletion = [];
         let selectedMainImagePreviewUrl = null;
         const MAX_EVENT_IMAGES = 10;
 
@@ -1284,7 +1285,14 @@
                 </div>`;
         }
 
-        async function loadProfiles() {
+
+
+
+
+
+
+
+async function loadProfiles() {
             if (!teamMembersListContainer) {
                 console.error("Profile container 'team-members-list' not found.");
                 throw new Error("Profile container 'team-members-list' not found.");
@@ -1293,9 +1301,10 @@
 
             try {
                 const teamMembersData = [
-                    { name: "مينا حنا فهيم", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Mina%20Hanna.png", imgInitial: "م.ح", linkedinUrl: "https://www.linkedin.com/in/engminahanna", facebookUrl: "https://www.facebook.com/Eng.Mina.H.F", phone: "+201203006152" },
-                    { name: "مينا فليب لبيب", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Mena%20Philip.jpg", imgInitial: "م.ف", linkedinUrl: "https://www.linkedin.com/in/mena-philip-766454340", facebookUrl: "https://www.facebook.com/profile.php?id=100004623032980", phone: "+201228226064" },
-                    { name: "عمر عبد الهادي رمادي", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Omar%20Ramady.png", imgInitial: "ع.ع", linkedinUrl: "https://www.linkedin.com/in/omar-al-ramady-3a2022206", facebookUrl: "https://www.facebook.com/omar.al.ramady.2025", phone: "+201118525778" },
+                    // تم إضافة خاصية mainLink هنا
+                    { name: "مينا حنا فهيم", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Mina%20Hanna.png", imgInitial: "م.ح", linkedinUrl: "https://www.linkedin.com/in/engminahanna", facebookUrl: "https://www.facebook.com/Eng.Mina.H.F", phone: "+201203006152", mainLink: "https://linktr.ee/Eng.MinaHanna" },
+                    { name: "مينا فليب لبيب", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Mena%20Philip.jpg", imgInitial: "م.ف", linkedinUrl: "https://www.linkedin.com/in/mena-philip-766454340", facebookUrl: "https://www.facebook.com/profile.php?id=100004623032980", phone: "+201228226064" , mainLink: "https://linktr.ee/Menaphilip"},
+                    { name: "عمر عبد الهادي رمادي", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Omar%20Ramady.png", imgInitial: "ع.ع", linkedinUrl: "https://www.linkedin.com/in/omar-al-ramady-3a2022206", facebookUrl: "https://www.facebook.com/omar.al.ramady.2025", phone: "+201118525778" , mainLink: "https://linktr.ee/Omar_AlRamady" },
                     { name: "محمد سيد محمد حسان", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Bakar%20(1).jpg", imgInitial: "م.س", linkedinUrl: "https://www.linkedin.com/in/mohammed-sayed-mohammed-1892382b8", facebookUrl: "https://www.facebook.com/share/15aNJqX3NS/", phone: "+201152216149" },
                     { name: "محمد محمود بربري", role: "مهندس كهرباء", imgUrl: "https://scontent.fcai2-2.fna.fbcdn.net/v/t39.30808-6/470165541_4094575017436722_4593658555281273385_n.jpg?_nc_cat=100&ccb=1-7&_nc_sid=a5f93a&_nc_ohc=VJQgz6RpGeoQ7kNvwEx496C&_nc_oc=AdkF6Cy3nZgJQO6yCEtJBEwsgi5tgoopzrxjgBcugYfq5bwJoggbEp7WGh3mw_eF5QU&_nc_zt=23&_nc_ht=scontent.fcai2-2.fna&_nc_gid=u0NjoM5BSF6XuW5o5ZfQYA&oh=00_AfJlJ55AuNqroATBFoS7HT6x3TpFkV8VR4WXUaBlpz7DTQ&oe=683BE7E3", imgInitial: "م.م" },
                     { name: "احمد طارق احمد محمد", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Ahmed%20Tarek.jpg", imgInitial: "أ.ط", linkedinUrl: "https://www.linkedin.com/in/ahmed-tarek-a6b9061b6", facebookUrl: "https://www.facebook.com/share/1EGXAoeUcn/", phone: "+201023237803" },
@@ -1306,22 +1315,73 @@
                     { name: "كريم احمد نور الدين", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Karim%20Ahmed.jpg", imgInitial: "ك.أ", linkedinUrl: "https://www.linkedin.com/in/karim-ahmed-b68877251", facebookUrl: "https://www.facebook.com/share/1Mu5LQo5sK/?mibextid=wwXIfr", phone: "+201006036359" },
                     { name: "محمد يوسف عمار", role: "مهندس كهرباء", imgUrl: "https://uzcrjhhvwgllsdsvftuj.supabase.co/storage/v1/object/public/personal-image//Mohamed%20Yousef.jpg", imgInitial: "م.ي", linkedinUrl: "https://www.linkedin.com/in/mohamed-yousef-bab471352", facebookUrl: "https://www.facebook.com/share/19JDJBVuch/", phone: "+201063815096" }
                 ];
-                const vacantSpots = 3;
-                let memberHtml = '';
+                
+                // Supervisor Card - Gold Theme
+                const supervisorCardHTML = `
+                <div class="col-span-full mb-6">
+                    <div class="team-member-card bg-slate-100 dark:bg-gray-900/50 p-4 rounded-lg text-center shadow-lg border-l-4 border-yellow-500" style="--animation-delay: 0s;">
+                        <h3 class="text-xl font-bold text-gray-800 dark:text-gray-100 mb-2">المشرف على المشروع</h3>
+                        <img src="https://placehold.co/96x96/64748B/FFFFFF?text=أ.د&font=cairo" alt="صورة المشرف" class="w-24 h-24 rounded-full mx-auto mb-3 border-4 border-yellow-300 shadow-md object-cover">
+                        <h4 class="text-lg font-bold text-gray-900 dark:text-white">أ.د/ اسم المشرف</h4>
+                        <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">أستاذ بقسم هندسة القوى والآلات الكهربية</p>
+                        <p class="text-sm text-gray-700 dark:text-gray-200 max-w-2xl mx-auto italic">
+                            "نتوجه بخالص الشكر والتقدير لمشرفنا الفاضل على دعمه المستمر وتوجيهاته القيمة التي كانت أساس نجاحنا في هذا المشروع."
+                        </p>
+                    </div>
+                </div>`;
+                
+                // Teaching Assistant Card - Blue Theme
+                const teachingAssistantCardHTML = `
+                <div class="col-span-full mb-6">
+                    <div class="team-member-card bg-slate-100 dark:bg-gray-900/50 p-4 rounded-lg text-center shadow-lg border-l-4 border-blue-500" style="--animation-delay: 0.05s;">
+                        <h3 class="text-xl font-bold text-gray-800 dark:text-gray-100 mb-2">المعيدة المساعدة</h3>
+                        <img src="https://placehold.co/96x96/4A7C59/FFFFFF?text=م.م&font=cairo" alt="صورة المعيدة المساعدة" class="w-24 h-24 rounded-full mx-auto mb-3 border-4 border-blue-300 shadow-md object-cover">
+                        <h4 class="text-lg font-bold text-gray-900 dark:text-white">م/ اسم المعيدة</h4>
+                        <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">معيدة مساعدة بقسم هندسة القوى والآلات الكهربية</p>
+                        <p class="text-sm text-gray-700 dark:text-gray-200 max-w-2xl mx-auto italic">
+                            "كما نتقدم بجزيل الشكر للمهندسة المعيدة على مجهوداتها ومتابعتها الدؤوبة التي ساهمت في إتمام هذا العمل على أفضل وجه."
+                        </p>
+                    </div>
+                </div>`;
 
+                let memberHtml = supervisorCardHTML + teachingAssistantCardHTML;
+
+                // Loop to generate team member cards
                 teamMembersData.forEach((member, index) => {
                     const profileData = {
-                        name: member.name, role: member.role, imgUrl: member.imgUrl, imgInitial: member.imgInitial,
-                        linkedinUrl: member.linkedinUrl, facebookUrl: member.facebookUrl, phone: member.phone,
-                        animationDelay: `${index * 0.05}s`,
-                        academic_id: 'N/A', User_Name: member.name ? member.name.toLowerCase().replace(/\s+/g, '_') : `user_${index}`
+                        name: member.name,
+                        role: member.role,
+                        imgUrl: member.imgUrl,
+                        imgInitial: member.imgInitial,
+                        linkedinUrl: member.linkedinUrl,
+                        facebookUrl: member.facebookUrl,
+                        phone: member.phone,
+                        animationDelay: `${(index + 2) * 0.05}s`
                     };
-                    memberHtml += createProfileCard(profileData);
+                    
+                    // --- التعديل هنا ---
+                    // تعريف متغيرات بناء البطاقة
+                    let cardClasses = "team-member-card p-2 sm:p-3 rounded-lg text-center";
+                    let cardAttributes = `style="--animation-delay: ${profileData.animationDelay};"`;
+
+                    // التحقق إذا كان للعضو رابط أساسي
+                    if (member.mainLink) {
+                        cardClasses += " cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300";
+                        cardAttributes += ` onclick="window.open('${member.mainLink}', '_blank')"`;
+                    }
+                    
+                    // بناء البطاقة مع الخصائص الجديدة
+                    memberHtml += `
+                        <div class="${cardClasses}" ${cardAttributes}>
+                            ${createProfileCard(profileData)}
+                        </div>`;
                 });
 
+
+                const vacantSpots = 3;
                 for (let i = 0; i < vacantSpots; i++) {
                     memberHtml += `
-                    <div class="team-member-card p-2 sm:p-3 rounded-lg text-center bg-gray-700 bg-opacity-20 border-gray-600" style="--animation-delay: ${(teamMembersData.length + i) * 0.05}s;">
+                    <div class="team-member-card p-2 sm:p-3 rounded-lg text-center bg-gray-700 bg-opacity-20 border-gray-600" style="--animation-delay: ${(teamMembersData.length + i + 2) * 0.05}s;">
                         <div>
                             <img src="https://placehold.co/70x70/333333/888888?text=؟${i+1}&font=cairo" alt="مكان شاغر ${i+1}" class="w-14 h-14 sm:w-16 sm:h-16 rounded-full mx-auto mb-1 border-2 border-gray-500 shadow-md">
                             <h3 class="text-xs font-bold text-gray-300 mb-0.5 leading-tight">مكان شاغر ${i+1}</h3>
@@ -1333,12 +1393,48 @@
                     </div>`;
                 }
                 teamMembersListContainer.innerHTML = memberHtml;
+
             } catch(e) {
                 console.error("Error in loadProfiles (static data processing):", e);
                 teamMembersListContainer.innerHTML = '<div class="text-center p-4 text-red-500 col-span-full">فشل تحميل ملفات الفريق.</div>';
                 throw e; 
             }
         }
+
+        // --- تم تعديل وظيفة createProfileCard لترجع المحتوى الداخلي فقط ---
+        function createProfileCard(member) {
+            const imgSrc = member.imgUrl ? member.imgUrl : `https://placehold.co/70x70/1a1a1a/00f0ff?text=${encodeURIComponent(member.imgInitial || '؟')}&font=cairo`;
+            const placeholderSrc = `https://placehold.co/70x70/1a1a1a/cccccc?text=${encodeURIComponent(member.imgInitial || '؟')}&font=cairo`;
+
+            let socialLinksHTML = '<div class="flex justify-center space-x-2 mt-2">';
+            if (member.linkedinUrl) {
+                socialLinksHTML += `<a href="${member.linkedinUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400">
+                                        <svg class="social-icon" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
+                                    </a>`;
+            }
+            if (member.facebookUrl) {
+                socialLinksHTML += `<a href="${member.facebookUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400">
+                                        <svg class="social-icon" viewBox="0 0 24 24"><path d="M9 8h-3v4h3v12h5v-12h3.642l.358-4h-4v-1.667c0-.955.192-1.333 1.115-1.333h2.885v-5h-3.808c-3.596 0-5.192 1.583-5.192 4.615v3.385z"/></svg>
+                                    </a>`;
+            }
+            if (member.phone) {
+                 socialLinksHTML += `<a href="https://wa.me/${member.phone.replace(/\s+/g, '')}" target="_blank" rel="noopener noreferrer" class="text-gray-500 hover:text-green-500 dark:text-gray-400 dark:hover:text-green-400">
+                                        <svg class="social-icon" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.712-.975z"/></svg>
+                                    </a>`;
+            }
+            socialLinksHTML += '</div>';
+
+            return `
+                    <img src="${imgSrc}" alt="صورة ${member.name || 'عضو'}" class="w-14 h-14 sm:w-16 sm:h-16 rounded-full mx-auto mb-1 border-2 shadow-md object-cover" onerror="this.onerror=null; this.src='${placeholderSrc}';">
+                    <h3 class="text-xs font-bold mb-0.5 leading-tight">${member.name || 'عضو غير معروف'}</h3>
+                    <p class="font-semibold text-xxs text-blue-500" style="font-size: 0.6rem;">${member.role || 'عضو'}</p>
+                    ${socialLinksHTML}
+                `;
+        }
+
+
+
+
 
 
         const upcomingEventsList = document.getElementById('upcoming-events-list');
@@ -1362,13 +1458,13 @@
             eventImagesPreviewContainer.innerHTML = ''; 
 
             if (Array.isArray(existingEventImageUrls)) {
-                existingEventImageUrls.forEach(url => {
-                    const previewItem = createImagePreviewElement(url, url, false);
+                existingEventImageUrls.forEach((url, index) => {
+                    const previewItem = createImagePreviewElement(url, url, false, index);
                     eventImagesPreviewContainer.appendChild(previewItem);
                 });
             } else if (existingEventImageUrls) {
                  console.warn("renderImagePreviews: existingEventImageUrls was not an array but had a value. Treating as single image URL for preview.", existingEventImageUrls);
-                 const previewItem = createImagePreviewElement(existingEventImageUrls, existingEventImageUrls, false);
+                 const previewItem = createImagePreviewElement(existingEventImageUrls, existingEventImageUrls, false, 0);
                  eventImagesPreviewContainer.appendChild(previewItem);
             }
 
@@ -1387,9 +1483,19 @@
 
             const img = document.createElement('img');
             img.src = displaySrc;
-            img.alt = 'معاينة الصورة';
+            img.alt = 'معاينة الملف';
             img.className = 'event-image-preview-item w-full h-full object-cover rounded-md';
             img.dataset.identifier = originalIdentifier;
+            
+             if (!displaySrc.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i)) {
+                img.src = 'https://placehold.co/100x100/64748B/FFFFFF?text=File'; // Generic file icon
+                const fileTypeLabel = document.createElement('p');
+                fileTypeLabel.className = 'absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs text-center p-1 truncate';
+                const fileName = isNewFile ? eventImageFilesToUpload[fileIndex].name : originalIdentifier.split('/').pop();
+                fileTypeLabel.textContent = fileName;
+                imgContainer.appendChild(fileTypeLabel);
+            }
+
 
             img.onclick = () => {
                 selectedMainImagePreviewUrl = originalIdentifier;
@@ -1397,20 +1503,29 @@
             };
             imgContainer.appendChild(img);
 
-            if (isNewFile) {
-                const deleteBtn = document.createElement('button');
-                deleteBtn.innerHTML = '&times;';
-                deleteBtn.className = 'absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-75 group-hover:opacity-100';
-                deleteBtn.onclick = (e) => {
-                    e.stopPropagation();
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.innerHTML = '&times;';
+            deleteBtn.className = 'absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-75 group-hover:opacity-100 cursor-pointer';
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (isNewFile) {
                     eventImageFilesToUpload.splice(fileIndex, 1);
-                    if (selectedMainImagePreviewUrl === displaySrc) {
-                        selectedMainImagePreviewUrl = (existingEventImageUrls.length > 0 && Array.isArray(existingEventImageUrls)) ? existingEventImageUrls[0] : (eventImageFilesToUpload.length > 0 ? URL.createObjectURL(eventImageFilesToUpload[0]) : null);
+                } else {
+                    const urlToRemove = originalIdentifier;
+                    const indexToRemove = existingEventImageUrls.indexOf(urlToRemove);
+                    if (indexToRemove > -1) {
+                        existingEventImageUrls.splice(indexToRemove, 1);
+                        imageUrlsPendingDeletion.push(urlToRemove);
                     }
-                    renderImagePreviews();
-                };
-                imgContainer.appendChild(deleteBtn);
-            }
+                }
+                if (selectedMainImagePreviewUrl === originalIdentifier) {
+                    selectedMainImagePreviewUrl = (existingEventImageUrls.length > 0) ? existingEventImageUrls[0] : (eventImageFilesToUpload.length > 0 ? URL.createObjectURL(eventImageFilesToUpload[0]) : null);
+                }
+                renderImagePreviews();
+            };
+            imgContainer.appendChild(deleteBtn);
+
             return imgContainer;
         }
 
@@ -1448,6 +1563,7 @@
             editingEventId = null;
             eventImageFilesToUpload = [];
             existingEventImageUrls = [];
+            imageUrlsPendingDeletion = [];
             selectedMainImagePreviewUrl = null;
             eventFormTitle.textContent = 'إنشاء فعالية جديدة';
             submitEventFormBtn.textContent = 'إنشاء';
@@ -1468,6 +1584,7 @@
             editingEventId = null;
             eventImageFilesToUpload = [];
             existingEventImageUrls = [];
+            imageUrlsPendingDeletion = [];
             selectedMainImagePreviewUrl = null;
             renderImagePreviews();
         });
@@ -1532,12 +1649,25 @@
                 }
                 if (operationError) throw operationError;
 
+                if (imageUrlsPendingDeletion.length > 0) {
+                    const filePathsToDelete = imageUrlsPendingDeletion.map(url => {
+                        try { return url.split('/events-images/')[1]; } catch { return null; }
+                    }).filter(Boolean);
+
+                    if (filePathsToDelete.length > 0) {
+                        const { error: storageDeleteError } = await _supabase.storage.from('events-images').remove(filePathsToDelete);
+                        if (storageDeleteError) console.error("Error deleting unlinked files from storage:", storageDeleteError);
+                    }
+                }
+
+
                 showModalMessage(`تم ${editingEventId ? 'تحديث' : 'إنشاء'} الفعالية بنجاح!`);
                 createEventForm.reset();
                 eventImageFilesInput.value = '';
                 eventImageFilesToUpload = [];
                 existingEventImageUrls = [];
                 selectedMainImagePreviewUrl = null;
+                imageUrlsPendingDeletion = [];
                 renderImagePreviews();
                 createEventFormContainer.classList.add('hidden-section');
                 if (currentUser) updateAuthState(currentUser);
@@ -2175,7 +2305,7 @@
             if (!currentUser) { showModalMessage('يجب تسجيل الدخول لتعديل الفعالية.', true); navigateTo('login').catch(err => console.warn("Navigation to login for edit event failed:", err.message)); return; }
             editingEventId = eventId;
             eventImageFilesToUpload = [];
-            selectedMainImagePreviewUrl = null;
+            imageUrlsPendingDeletion = []; // Reset pending deletions on new edit
 
             try {
                 const eventQuery = _supabase.from('project_events').select('*')
